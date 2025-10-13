@@ -26,4 +26,14 @@ export class AdminController {
             data: driver,
         };
     }
+
+    @Post('assignments/:id/process-payout')
+    async processPayout(@Param('id', ParseUUIDPipe) id: string) {
+        const assignment = await this.adminService.processAssignmentPayout(id);
+        return {
+            success: true,
+            message: `Pagamento para a atribuição ${id} processado com sucesso.`,
+            data: assignment,
+        };
+    }
 }

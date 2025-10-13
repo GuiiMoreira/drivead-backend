@@ -1,9 +1,11 @@
-import { Controller, Post, Body, UseGuards, Req, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, UseInterceptors, UploadedFiles, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { DriverGuard } from '../core/guards/driver.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { DriversService } from './drivers.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { User } from '@prisma/client';
+import { ScheduleInstallDto } from './dto/schedule-install.dto';
 
 @Controller('drivers')
 export class DriversController {
@@ -44,6 +46,86 @@ export class DriversController {
         return {
             success: true,
             message: 'Documentos enviados para aprovação com sucesso.',
+        };
+    }
+
+    @Get('me/campaigns')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async getEligibleCampaigns(@Req() req) {
+        const user = req.user as User;
+        const campaigns = await this.driversService.listEligibleCampaigns(user);
+        return {
+            success: true,
+            data: campaigns,
+        };
+    }
+
+    @Post('me/campaigns/:id/apply')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async applyForCampaign(
+        @Req() req,
+        @Param('id', ParseUUIDPipe) id: string,
+    ) {
+        const user = req.user as User;
+        const assignment = await this.driversService.applyForCampaign(user, id);
+        return {
+            success: true,
+            message: 'Candidatura para a campanha enviada com sucesso.',
+            data: assignment,
+        };
+    }
+
+    @Get('me/assignment')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async getCurrentAssignment(@Req() req) {
+        const assignment = await this.driversService.getCurrentAssignment(req.user as User);
+        return { success: true, data: assignment };
+    }
+
+    @Post('me/assignment/schedule')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async scheduleInstallation(
+        @Req() req,
+        @Body() scheduleDto: ScheduleInstallDto,
+    ) {
+        const updatedAssignment = await this.driversService.scheduleInstallation(
+            req.user as User,
+            scheduleDto,
+        );
+        return {
+            success: true,
+            message: 'Instalação agendada com sucesso.',
+            data: updatedAssignment,
+        };
+    }
+
+    @Post('me/assignment/confirm-installation')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    @UseInterceptors(FileFieldsInterceptor([
+        { name: 'photoBefore', maxCount: 1 },
+        { name: 'photoAfter', maxCount: 1 },
+    ]))
+    async confirmInstallation(
+        @Req() req,
+        @UploadedFiles() files: { photoBefore?: Express.Multer.File[], photoAfter?: Express.Multer.File[] }
+    ) {
+        const user = req.user as User;
+        const assignment = await this.driversService.confirmInstallation(user, files);
+
+        return {
+            success: true,
+            message: 'Instalação confirmada com sucesso! A sua campanha está oficialmente ativa.',
+            data: assignment,
+        };
+    }
+
+    @Get('me/wallet')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async getMyWallet(@Req() req) {
+        const wallet = await this.driversService.getMyWallet(req.user as User);
+        return {
+            success: true,
+            data: wallet,
         };
     }
 }

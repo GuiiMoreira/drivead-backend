@@ -6,6 +6,7 @@ import { AdvertiserGuard } from '../core/guards/advertiser.guard';
 import { PayCampaignDto } from './dto/pay-campaign.dto';
 import { User } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { CalculatePriceDto } from './dto/calculate-price.dto';
 
 @Controller('campaigns')
 export class CampaignsController {
@@ -15,12 +16,15 @@ export class CampaignsController {
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
     async createCampaign(@Req() req, @Body() createCampaignDto: CreateCampaignDto) {
         const user = req.user as User;
-        const campaign = await this.campaignsService.createCampaign(user, createCampaignDto);
+        const { campaign, priceData } = await this.campaignsService.createCampaign(user, createCampaignDto);
 
         return {
             success: true,
             message: 'Campanha criada como rascunho com sucesso.',
-            data: campaign,
+            data: {
+                campaign,
+                priceDetails: priceData,
+            },
         };
     }
 
@@ -52,6 +56,28 @@ export class CampaignsController {
         return {
             success: true,
             data: campaign,
+        };
+    }
+
+    @Get(':id/report')
+    @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+    async getCampaignReport(@Req() req, @Param('id', ParseUUIDPipe) id: string) {
+        const user = req.user as User;
+        const reportData = await this.campaignsService.generateCampaignReport(user, id);
+
+        return {
+            success: true,
+            data: reportData,
+        };
+    }
+
+    @Post('calculate-price')
+    @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+    calculateCampaignPrice(@Body() calculatePriceDto: CalculatePriceDto) {
+        const priceData = this.campaignsService.calculatePrice(calculatePriceDto);
+        return {
+            success: true,
+            data: priceData,
         };
     }
 }

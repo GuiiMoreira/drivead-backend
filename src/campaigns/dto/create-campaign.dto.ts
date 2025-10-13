@@ -1,18 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsString, IsNotEmpty, IsEnum, IsObject, IsDateString, IsNumber, Min, ValidateNested, IsArray, IsOptional } from 'class-validator';
-import { CampaignType } from '@prisma/client';
+import { IsString, IsNotEmpty, IsObject, ValidateNested, IsArray, IsEnum, IsInt, Min, IsOptional } from 'class-validator';
+import { CampaignType, VehicleCategory } from '@prisma/client';
+import { ExposureLevel } from './calculate-price.dto'; // Importando o Enum do outro DTO
 
-class CampaignPreferencesDto {
-    @IsNumber()
-    @IsOptional()
-    min_km_per_day?: number;
-
-    @IsArray()
-    @IsString({ each: true })
-    @IsOptional()
-    vehicle_types?: string[];
-}
-
+// Mantemos o DTO de criativo como antes
 class CampaignCreativeDto {
     @IsString()
     @IsNotEmpty()
@@ -24,41 +15,40 @@ class CampaignCreativeDto {
 }
 
 export class CreateCampaignDto {
+    // --- Campos descritivos da campanha ---
     @IsString()
     @IsNotEmpty()
     title: string;
-
-    @IsEnum(CampaignType)
-    @IsNotEmpty()
-    type: CampaignType; // 'commercial' ou 'political'
 
     @IsObject()
     @IsNotEmpty()
     area_geojson: object;
 
-    @IsDateString()
-    @IsNotEmpty()
-    start: string;
-
-    @IsDateString()
-    @IsNotEmpty()
-    end: string;
-
-    @IsNumber()
-    @Min(1)
-    budget: number;
-
-    @IsNumber()
-    @Min(1)
-    num_cars: number;
-
-    @ValidateNested()
-    @Type(() => CampaignPreferencesDto)
-    @IsOptional()
-    preferences?: CampaignPreferencesDto;
-
     @ValidateNested()
     @Type(() => CampaignCreativeDto)
     @IsNotEmpty()
     creative: CampaignCreativeDto;
+
+    // --- Campos para o cálculo de preço (Fatores do SmartPricing) ---
+    @IsArray()
+    @IsEnum(VehicleCategory, { each: true })
+    @IsNotEmpty()
+    targetCategories: VehicleCategory[];
+
+    @IsInt()
+    @Min(1)
+    durationDays: number;
+
+    @IsInt()
+    @Min(1)
+    numCars: number;
+
+    @IsEnum(ExposureLevel)
+    @IsNotEmpty()
+    exposureLevel: ExposureLevel;
+
+    // O campo `type` (commercial/political) continua importante
+    @IsEnum(CampaignType)
+    @IsNotEmpty()
+    type: CampaignType;
 }

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, Max, Min, IsInt, ValidateNested, IsDefined } from 'class-validator';
+import { IsNotEmpty, IsString, Max, Min, IsInt, ValidateNested, IsDefined, IsEnum, IsOptional } from 'class-validator';
+import { VehicleCategory } from '@prisma/client';
 
 // DTO para os detalhes do veículo
 class VehicleProfileDto {
@@ -16,6 +17,10 @@ class VehicleProfileDto {
     @Min(2000) // Regra de negócio: não aceitar carros muito antigos
     @Max(new Date().getFullYear() + 1)
     year: number;
+
+    @IsEnum(VehicleCategory)
+    @IsOptional()
+    category?: VehicleCategory;
 }
 
 // DTO para os detalhes do motorista

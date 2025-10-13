@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: drivead_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  minio:
+    image: minio/minio:latest
+    container_name: drivead_minio
+    ports:
+      - "9000:9000"  # API do S3
+      - "9001:9001"  # Consola Web do MinIO
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: always
+
+volumes:
+  minio_data:

@@ -64,6 +64,7 @@ model Driver {
   assignments  Assignment[]
   positions    Position[]
   kycDocuments KycDocument[]
+  wallet DriverWallet?
 }
 
 // Modelo de Veículos
@@ -75,7 +76,8 @@ model Vehicle {
   model     String?
   year      Int?
   color     String?
-  photos    Json? // Array de URLs de fotos
+  category  VehicleCategory @default(ESSENTIAL)
+  photos    Json? 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -124,10 +126,45 @@ model Assignment {
   removedAt          DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
+  payoutProcessedAt DateTime?
 
+  dailyMetrics DailyAssignmentMetric[] 
   installProofs InstallProof[]
   positions     Position[]
   payments      Payment[]
+}
+
+model DailyAssignmentMetric {
+  id                  String     @id @default(uuid())
+  assignmentId        String
+  assignment          Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  date                DateTime   @db.Date
+  kilometersDriven    Float      @default(0)
+  timeInMotionSeconds Int        @default(0)
+  createdAt           DateTime   @default(now())
+
+  @@unique([assignmentId, date]) // Garante apenas um registo por dia por atribuição
+}
+
+model DriverWallet {
+  id        String    @id @default(uuid())
+  driverId  String    @unique
+  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  balance   Float     @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String            @id @default(uuid())
+  walletId    String
+  wallet      DriverWallet      @relation(fields: [walletId], references: [id])
+  amount      Float
+  type        TransactionType // 'CREDIT' ou 'DEBIT'
+  description String
+  createdAt   DateTime          @default(now())
 }
 
 // =================================================================
@@ -140,6 +177,7 @@ model Installer {
   companyName String?
   phone       String?
   areas       Json?
+  address       String?
   priceInstall Float?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -298,4 +336,17 @@ enum PaymentStatus {
   completed
   failed
   refunded
+}
+
+enum VehicleCategory {
+  ESSENTIAL // Antigo "POP"
+  SMART
+  PRIME
+  PRO
+  ECO
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
 }
