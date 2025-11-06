@@ -5,6 +5,7 @@ import { CampaignStatus, User, AssignmentStatus } from '@prisma/client';
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { VehicleCategory } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
+import { ProofType } from '@prisma/client';
 
 @Injectable()
 export class DriversService {
@@ -369,5 +370,39 @@ export class DriversService {
         }
 
         return wallet;
+    }
+
+    /**
+   * Recebe uma foto de prova periódica (aleatória ou final) do motorista.
+   */
+    async submitPeriodicProof(user: User, file: Express.Multer.File, proofType: ProofType) {
+        // 1. Encontra a atribuição ativa do motorista
+        const assignment = await this.prisma.assignment.findFirst({
+            where: {
+                driver: { userId: user.id },
+                status: { in: [AssignmentStatus.installed, AssignmentStatus.active] },
+            },
+        });
+
+        if (!assignment) {
+            throw new NotFoundException('Nenhuma campanha ativa encontrada para enviar a prova.');
+        }
+
+        // 2. Faz o upload do ficheiro para o Cloudflare R2
+        const fileUrl = await this.storageService.uploadFile(
+            file,
+            `proofs/${assignment.id}/periodic`, // Guarda numa subpasta 'periodic'
+        );
+
+        // 3. Guarda o registo da prova no banco de dados
+        const newProof = await this.prisma.periodicProof.create({
+            data: {
+                assignmentId: assignment.id,
+                photoUrl: fileUrl,
+                proofType: proofType,
+            },
+        });
+
+        return newProof;
     }
 }

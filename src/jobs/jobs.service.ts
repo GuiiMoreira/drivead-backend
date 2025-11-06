@@ -9,6 +9,7 @@ import { AssignmentStatus } from '@prisma/client';
 export class JobsService {
     constructor(
         @InjectQueue('metrics-queue') private metricsQueue: Queue,
+        @InjectQueue('antifraud-queue') private antifraudQueue: Queue,
         private prisma: PrismaService,
     ) { }
 
@@ -38,5 +39,28 @@ export class JobsService {
         }
 
         console.log(`${activeAssignments.length} jobs de cálculo agendados.`);
+    }
+
+    @Cron(CronExpression.EVERY_HOUR)
+    async scheduleInactivityChecks() {
+        console.log('Agendando jobs para verificação de inatividade...');
+
+        const activeAssignments = await this.prisma.assignment.findMany({
+            where: {
+                // Apenas motoristas que já instalaram o adesivo
+                status: { in: [AssignmentStatus.installed, AssignmentStatus.active] },
+            },
+            select: {
+                id: true,
+            },
+        });
+
+        for (const assignment of activeAssignments) {
+            await this.antifraudQueue.add('check-driver-inactivity', {
+                assignmentId: assignment.id,
+            });
+        }
+
+        console.log(`${activeAssignments.length} jobs de verificação de inatividade agendados.`);
     }
 }

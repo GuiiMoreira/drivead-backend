@@ -132,6 +132,7 @@ model Assignment {
   installProofs InstallProof[]
   positions     Position[]
   payments      Payment[]
+  periodicProofs PeriodicProof[]
 }
 
 model DailyAssignmentMetric {
@@ -349,4 +350,20 @@ enum VehicleCategory {
 enum TransactionType {
   CREDIT
   DEBIT
+}
+
+model PeriodicProof {
+  id           String    @id @default(uuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  photoUrl     String
+  proofType    ProofType // Ex: 'random' ou 'final'
+  createdAt    DateTime  @default(now())
+
+  @@index([assignmentId])
+}
+
+enum ProofType {
+  RANDOM
+  FINAL
 }

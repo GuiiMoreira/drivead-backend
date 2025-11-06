@@ -1,4 +1,9 @@
-import { Controller, Post, Body, UseGuards, Req, UseInterceptors, UploadedFiles, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import {
+    Controller, Post, Body, UseGuards, Req, Get, Param, ParseUUIDPipe,
+    UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { SubmitProofDto } from './dto/submit-proof.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { DriverGuard } from '../core/guards/driver.guard';
 import { AuthGuard } from '@nestjs/passport';
@@ -126,6 +131,36 @@ export class DriversController {
         return {
             success: true,
             data: wallet,
+        };
+    }
+
+    @Post('me/assignment/submit-periodic-proof')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    @UseInterceptors(FileInterceptor('photo')) // Espera um único ficheiro no campo 'photo'
+    async submitPeriodicProof(
+        @Req() req,
+        @UploadedFile(
+            // Adicionamos validação básica de ficheiro (ex: max 5MB, apenas JPEG/PNG)
+            new ParseFilePipe({
+                validators: [
+                    new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 5 }),
+                    new FileTypeValidator({ fileType: '.(png|jpeg|jpg)' }),
+                ],
+            }),
+        ) file: Express.Multer.File,
+        @Body() submitProofDto: SubmitProofDto, // Recebe os dados do corpo (proofType)
+    ) {
+        const user = req.user as User;
+        const proof = await this.driversService.submitPeriodicProof(
+            user,
+            file,
+            submitProofDto.proofType,
+        );
+
+        return {
+            success: true,
+            message: `Prova do tipo ${submitProofDto.proofType} enviada com sucesso.`,
+            data: proof,
         };
     }
 }
