@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { KycStatus } from '@prisma/client';
+import { TransactionStatus } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -112,6 +113,58 @@ export class AdminService {
             // await tx.driverWallet.update({ where: { driverId }, data: { balance: { increment: bonus } } });
 
             return updatedAssignment;
+        });
+    }
+
+    async listPendingWithdrawals() {
+        return this.prisma.walletTransaction.findMany({
+            where: {
+                type: 'DEBIT',
+                status: TransactionStatus.PENDING,
+            },
+            include: {
+                wallet: {
+                    include: {
+                        driver: {
+                            include: {
+                                user: {
+                                    select: { name: true, phone: true },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'asc', // Mostra os pedidos mais antigos primeiro
+            },
+        });
+    }
+
+    /**
+     * Marca uma transação de saque como 'COMPLETED'.
+     * @param transactionId - O ID da WalletTransaction a ser aprovada.
+     */
+    async approveWithdrawal(transactionId: string) {
+        const transaction = await this.prisma.walletTransaction.findUnique({
+            where: { id: transactionId },
+        });
+
+        if (!transaction) {
+            throw new NotFoundException('Solicitação de saque não encontrada.');
+        }
+
+        if (transaction.status !== TransactionStatus.PENDING) {
+            throw new ConflictException(`A solicitação já está no estado: ${transaction.status}`);
+        }
+
+        // Atualiza o status
+        return this.prisma.walletTransaction.update({
+            where: { id: transactionId },
+            data: {
+                status: TransactionStatus.COMPLETED,
+                // No futuro, podemos adicionar um campo 'processedByAdminId'
+            },
         });
     }
 }

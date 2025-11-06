@@ -6,6 +6,8 @@ import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { VehicleCategory } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 import { ProofType } from '@prisma/client';
+import { WithdrawRequestDto } from './dto/withdraw-request.dto';
+import { TransactionStatus, TransactionType } from '@prisma/client';
 
 @Injectable()
 export class DriversService {
@@ -404,5 +406,52 @@ export class DriversService {
         });
 
         return newProof;
+    }
+
+    async requestWithdrawal(user: User, withdrawDto: WithdrawRequestDto) {
+        const { amount } = withdrawDto;
+
+        // 1. Encontra a carteira do motorista
+        const wallet = await this.prisma.driverWallet.findFirst({
+            where: {
+                driver: { userId: user.id },
+            },
+        });
+
+        if (!wallet || wallet.balance < amount) {
+            throw new ForbiddenException('Saldo insuficiente para realizar o saque.');
+        }
+
+        // 2. Executa o saque numa transação
+        return this.prisma.$transaction(async (tx) => {
+            // 2.1. Subtrai o valor do saldo da carteira
+            const updatedWallet = await tx.driverWallet.update({
+                where: { id: wallet.id },
+                data: {
+                    balance: {
+                        decrement: amount,
+                    },
+                },
+            });
+
+            // 2.2. Cria o registo da transação de débito (saque)
+            const transaction = await tx.walletTransaction.create({
+                data: {
+                    walletId: wallet.id,
+                    amount: -amount, // Guardamos o valor como negativo para débitos
+                    type: TransactionType.DEBIT,
+                    status: TransactionStatus.PENDING, // O saque fica pendente de aprovação/processamento do admin
+                    description: `Solicitação de saque via PIX`,
+                },
+            });
+
+            // TODO: Disparar notificação para o admin sobre o novo pedido de saque
+
+            return {
+                message: 'Solicitação de saque recebida com sucesso. O processamento será feito pela nossa equipa.',
+                newBalance: updatedWallet.balance,
+                transaction,
+            };
+        });
     }
 }

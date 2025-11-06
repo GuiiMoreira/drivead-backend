@@ -164,6 +164,7 @@ model WalletTransaction {
   wallet      DriverWallet      @relation(fields: [walletId], references: [id])
   amount      Float
   type        TransactionType // 'CREDIT' ou 'DEBIT'
+  status      TransactionStatus @default(COMPLETED)
   description String
   createdAt   DateTime          @default(now())
 }
@@ -366,4 +367,10 @@ model PeriodicProof {
 enum ProofType {
   RANDOM
   FINAL
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }

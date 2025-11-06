@@ -11,6 +11,7 @@ import { DriversService } from './drivers.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { User } from '@prisma/client';
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
+import { WithdrawRequestDto } from './dto/withdraw-request.dto';
 
 @Controller('drivers')
 export class DriversController {
@@ -161,6 +162,22 @@ export class DriversController {
             success: true,
             message: `Prova do tipo ${submitProofDto.proofType} enviada com sucesso.`,
             data: proof,
+        };
+    }
+
+    @Post('me/wallet/withdraw')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async requestWithdrawal(
+        @Req() req,
+        @Body() withdrawDto: WithdrawRequestDto,
+    ) {
+        const result = await this.driversService.requestWithdrawal(
+            req.user as User,
+            withdrawDto,
+        );
+        return {
+            success: true,
+            data: result,
         };
     }
 }

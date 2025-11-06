@@ -36,4 +36,23 @@ export class AdminController {
             data: assignment,
         };
     }
+
+    @Get('wallet/pending-withdrawals')
+    async getPendingWithdrawals() {
+        const withdrawals = await this.adminService.listPendingWithdrawals();
+        return {
+            success: true,
+            data: withdrawals,
+        };
+    }
+
+    @Post('wallet/approve-withdrawal/:id')
+    async approveWithdrawal(@Param('id', ParseUUIDPipe) id: string) {
+        const transaction = await this.adminService.approveWithdrawal(id);
+        return {
+            success: true,
+            message: `Saque ${transaction.id} marcado como concluído.`,
+            data: transaction,
+        };
+    }
 }
