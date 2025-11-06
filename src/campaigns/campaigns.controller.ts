@@ -7,10 +7,13 @@ import { PayCampaignDto } from './dto/pay-campaign.dto';
 import { User } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
+import { PaymentsService } from '../payments/payments.service';
 
 @Controller('campaigns')
 export class CampaignsController {
-    constructor(private readonly campaignsService: CampaignsService, private prisma: PrismaService,) { }
+    constructor(private readonly campaignsService: CampaignsService,
+        private prisma: PrismaService,
+        private readonly paymentsService: PaymentsService,) { }
 
     @Post()
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
@@ -33,15 +36,20 @@ export class CampaignsController {
     async payForCampaign(
         @Req() req,
         @Param('id', ParseUUIDPipe) id: string,
-        @Body() payCampaignDto: PayCampaignDto, // Embora não usemos o DTO na lógica, ele valida o corpo da requisição
+        @Body() payCampaignDto: PayCampaignDto, // DTO de pagamento
     ) {
         const user = req.user as User;
-        const campaign = await this.campaignsService.activateCampaign(user, id);
+        // Removemos a lógica de simulação e chamamos o serviço real
+        const paymentData = await this.paymentsService.createPaymentOrder(id, user);
 
         return {
             success: true,
-            message: `Pagamento para a campanha "${campaign.title}" processado. Status alterado para: ${campaign.status}.`,
-            data: campaign,
+            message: 'Ordem de pagamento PIX criada com sucesso.',
+            data: {
+                // Envia o PIX Copia e Cola e o QR Code (em base64) para o frontend
+                pixCopiaECola: paymentData!.qr_code,
+                pixQrCodeBase64: paymentData!.qr_code_base64,
+            },
         };
     }
 
@@ -80,4 +88,6 @@ export class CampaignsController {
             data: priceData,
         };
     }
+
+
 }

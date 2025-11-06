@@ -11,6 +11,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
 import { JobsModule } from './jobs/jobs.module';
 import { StorageModule } from './storage/storage.module';
+import { PaymentsModule } from './payments/payments.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -36,7 +38,7 @@ import { StorageModule } from './storage/storage.module';
         },
       }),
       inject: [ConfigService],
-    }), JobsModule, StorageModule,
+    }), JobsModule, StorageModule, PaymentsModule, WebhooksModule,
   ],
   controllers: [],
   providers: [],

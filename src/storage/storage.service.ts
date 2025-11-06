@@ -7,20 +7,20 @@ import { randomBytes } from 'crypto';
 export class StorageService {
     private readonly s3Client: S3Client;
     private readonly bucketName: string;
-    private readonly endpoint: string;
+    private readonly publicUrl: string; // <-- NOVO
 
     constructor(private configService: ConfigService) {
         this.bucketName = this.configService.getOrThrow('AWS_S3_BUCKET_NAME');
-        this.endpoint = this.configService.getOrThrow('S3_ENDPOINT');
+        this.publicUrl = this.configService.getOrThrow('S3_PUBLIC_URL'); // <-- NOVO
 
         this.s3Client = new S3Client({
-            endpoint: this.endpoint,
+            endpoint: this.configService.getOrThrow('S3_ENDPOINT'),
             region: this.configService.getOrThrow('AWS_REGION'),
             credentials: {
                 accessKeyId: this.configService.getOrThrow('AWS_ACCESS_KEY_ID'),
                 secretAccessKey: this.configService.getOrThrow('AWS_SECRET_ACCESS_KEY'),
             },
-            forcePathStyle: true, // Essencial para o MinIO
+            // forcePathStyle: true, // <-- REMOVIDO (Não é necessário para o R2)
         });
     }
 
@@ -34,12 +34,12 @@ export class StorageService {
             Key: fileName,
             Body: file.buffer,
             ContentType: file.mimetype,
-            ACL: 'public-read', // Torna o ficheiro publicamente acessível
+            // ACL: 'public-read', // <-- REMOVIDO (O R2 gere o acesso a nível do bucket)
         });
 
         await this.s3Client.send(command);
 
-        // Retorna a URL pública do ficheiro
-        return `${this.endpoint}/${this.bucketName}/${fileName}`;
+        // Retorna a URL pública correta do R2
+        return `${this.publicUrl}/${fileName}`;
     }
 }
