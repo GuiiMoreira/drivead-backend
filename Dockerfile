@@ -1,27 +1,39 @@
-# ---- Base Stage ----
-FROM node:18-alpine AS base
+# --- 1. Estágio de Build ---
+# Usa uma imagem Node.js 18 "alpine" (leve)
+FROM node:18-alpine AS builder
+
+# Define o diretório de trabalho
 WORKDIR /usr/src/app
-RUN npm install -g pnpm
 
-# ---- Dependencies Stage ----
-FROM base AS dependencies
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+# Copia os ficheiros de dependência
+COPY package*.json ./
 
-# ---- Build Stage ----
-FROM base AS build
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# Instala as dependências
+RUN npm install
+
+# Copia todo o resto do código
 COPY . .
-RUN npm run build
-# Gere o Prisma Client
+
+# Gera o Prisma Client (essencial!)
 RUN npx prisma generate
 
-# ---- Production Stage ----
-FROM base AS production
-COPY --from=dependencies /usr/src/app/node_modules ./node_modules
-COPY --from=build /usr/src/app/dist ./dist
-COPY --from=build /usr/src/app/prisma ./prisma
+# Constrói a aplicação (compila o TypeScript)
+RUN npm run build
 
-# Comando para iniciar a aplicação
+# --- 2. Estágio de Produção ---
+# Começa de uma imagem limpa
+FROM node:18-alpine
+WORKDIR /usr/src/app
+
+# Copia apenas os ficheiros necessários da etapa de build
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/prisma ./prisma
+COPY package*.json ./
+
+# Expõe a porta que a sua app usa (definida no .env ou 3000 por defeito)
+EXPOSE 3000
+
+# O comando para iniciar a aplicação
+# (Vamos sobrepor isto no Railway para incluir as migrações)
 CMD ["node", "dist/main"]
