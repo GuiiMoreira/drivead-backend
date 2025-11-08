@@ -17,28 +17,32 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Torna as variáveis de ambiente disponíveis globalmente
+      isGlobal: true,
+    }),
+    ScheduleModule.forRoot(),
+    PrismaModule,
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        connection: {
+          host: configService.get('REDISHOST', 'localhost'),
+          port: Number(configService.get('REDISPORT', 6379)),
+          password: configService.get('REDISPASSWORD'),
+          username: configService.get('REDISUSER'),
+        },
+      }),
+      inject: [ConfigService],
     }),
     AuthModule,
-    PrismaModule,
     DriversModule,
     AdminModule,
     CampaignsModule,
     InstallersModule,
     PositionsModule,
-    ConfigModule.forRoot({ isGlobal: true }),
-    ScheduleModule.forRoot(), // Módulo de agendamento
-    BullModule.forRootAsync({ // Módulo do BullMQ
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          // Adicione password se o seu Redis tiver uma
-        },
-      }),
-      inject: [ConfigService],
-    }), JobsModule, StorageModule, PaymentsModule, WebhooksModule,
+    JobsModule,
+    StorageModule,
+    PaymentsModule,
+    WebhooksModule,
   ],
   controllers: [],
   providers: [],
