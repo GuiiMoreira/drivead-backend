@@ -10,14 +10,24 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": "./",
-    "incremental": true,
+    "baseUrl": "./src",
+    "paths": {
+      "src/*": [
+        "./*"
+      ]
+    },
+    "incremental": false,
     "skipLibCheck": true,
     "strictNullChecks": false,
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "prisma"
+  ]
 }
