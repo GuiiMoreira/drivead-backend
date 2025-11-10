@@ -133,6 +133,7 @@ model Assignment {
   positions     Position[]
   payments      Payment[]
   periodicProofs PeriodicProof[]
+  proofStatus ProofRequestStatus @default(NONE)
 }
 
 model DailyAssignmentMetric {
@@ -199,6 +200,10 @@ model InstallProof {
   installer      Installer? @relation(fields: [installerId], references: [id])
   exif           Json?
   createdAt      DateTime   @default(now())
+
+  status      ApprovalStatus @default(PENDING) // 
+  adminNotes  String?                          // Para o admin dizer pq rejeitou
+  reviewedAt  DateTime?
 
   @@index([assignmentId])
 }
@@ -323,9 +328,10 @@ enum CampaignStatus {
 }
 
 enum AssignmentStatus {
-  assigned
+assigned
   accepted
-  installed
+  awaiting_approval
+  installed         
   active
   removed
   fraud
@@ -361,6 +367,10 @@ model PeriodicProof {
   proofType    ProofType // Ex: 'random' ou 'final'
   createdAt    DateTime  @default(now())
 
+  status      ApprovalStatus @default(PENDING)
+  adminNotes  String?                          
+  reviewedAt  DateTime?                        
+
   @@index([assignmentId])
 }
 
@@ -373,4 +383,15 @@ enum TransactionStatus {
   PENDING
   COMPLETED
   FAILED
+}
+
+enum ProofRequestStatus {
+  NONE
+  PENDING_RANDOM
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

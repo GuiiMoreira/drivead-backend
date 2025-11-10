@@ -19,35 +19,56 @@ export class AuthService {
      * Em produção, isto deve integrar-se com um gateway de SMS.
      */
     async sendOtp(phone: string): Promise<void> {
+        // 1. Gera um código aleatório de 6 dígitos
         const otp = randomInt(100000, 999999).toString();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Validade de 10 minutos
 
-        // Utiliza `upsert` para criar ou atualizar o desafio OTP no banco de dados.
-        // NOTE: A tabela `otp_challenges` precisa de ser adicionada ao `schema.prisma`.
-        // Por simplicidade, vamos simular o armazenamento e o envio.
+        // 2. Define a validade (ex: 5 minutos)
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
-        this.logger.log(`OTP para ${phone}: ${otp}`); // Simulação do envio de SMS
-        // Em um caso real, você guardaria `otp` e `expiresAt` no Redis ou no DB.
+        // 3. Guarda (ou atualiza) o código na base de dados
+        await this.prisma.otpChallenge.upsert({
+            where: { phone },
+            update: {
+                otpCode: otp,
+                expiresAt: expiresAt,
+            },
+            create: {
+                phone,
+                otpCode: otp,
+                expiresAt,
+            },
+        });
+
+        // --- PONTO DE ENVIO DE SMS ---
+        // Por enquanto, vamos registar no log para você poder ver no Railway.
+        // No futuro, substituiremos esta linha pela chamada ao serviço de SMS (Twilio, Zenvia, etc.)
+        this.logger.log(`🔑 [OTP REAL] Para ${phone}: ${otp}`);
+        // -----------------------------
     }
-
     /**
      * Verifica o OTP e, se válido, cria ou encontra o utilizador e gera os tokens.
      */
     async verifyOtpAndSignTokens(phone: string, otp: string) {
-        // A sua lógica de verificação de OTP aqui...
-        if (otp !== '123456') { // TODO: Substituir pela verificação real
+        // 1. Busca o desafio no banco de dados
+        const challenge = await this.prisma.otpChallenge.findUnique({
+            where: { phone },
+        });
+
+        // 2. Verifica se existe, se o código bate e se não expirou
+        if (!challenge || challenge.otpCode !== otp || new Date() > challenge.expiresAt) {
             throw new UnauthorizedException('Código OTP inválido ou expirado.');
         }
 
-        let user = await this.prisma.user.findUnique({ where: { phone } });
+        // 3. Se passou, apaga o desafio para não ser usado novamente
+        await this.prisma.otpChallenge.delete({ where: { phone } });
 
+        // --- A partir daqui, o fluxo segue normal ---
+        let user = await this.prisma.user.findUnique({ where: { phone } });
         if (!user) {
-            user = await this.prisma.user.create({
-                data: { phone, role: Role.driver },
-            });
+            user = await this.prisma.user.create({ data: { phone, role: Role.driver } });
         }
 
-        // Gera e armazena os tokens
         return this._generateAndStoreTokens(user);
     }
 

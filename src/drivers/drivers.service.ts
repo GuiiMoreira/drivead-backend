@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
-import { CampaignStatus, User, AssignmentStatus } from '@prisma/client';
+import { CampaignStatus, User, AssignmentStatus, ApprovalStatus } from '@prisma/client';
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { VehicleCategory } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
@@ -317,34 +317,31 @@ export class DriversService {
             throw new NotFoundException('Nenhuma instalação agendada encontrada para confirmar.');
         }
 
-        const photoBefore = files.photoBefore[0];
-        const photoAfter = files.photoAfter[0];
+        // 2. Faz o upload real dos ficheiros para o Storage (S3/R2)
+        // Usamos await Promise.all para fazer os dois uploads em paralelo e ser mais rápido
+        const [photoBeforeUrl, photoAfterUrl] = await Promise.all([
+            this.storageService.uploadFile(files.photoBefore[0], `proofs/${assignment.id}/before`),
+            this.storageService.uploadFile(files.photoAfter[0], `proofs/${assignment.id}/after`),
+        ]);
 
-        // 2. Simula o upload dos ficheiros para o storage
-        const photoBeforeUrl = await this.storageService.uploadFile(files.photoBefore[0], `proofs/${assignment.id}`);
-        const photoAfterUrl = await this.storageService.uploadFile(files.photoAfter[0], `proofs/${assignment.id}`);
-
-        console.log(`Simulando upload de ${photoBefore.originalname} para ${photoBeforeUrl}`);
-        console.log(`Simulando upload de ${photoAfter.originalname} para ${photoAfterUrl}`);
-
-        // 3. Executa a criação da prova e a atualização da atribuição numa transação
         return this.prisma.$transaction(async (tx) => {
-            // Cria o registo de prova de instalação
+            // 3. Cria o registo da prova com status PENDING para revisão do admin
             await tx.installProof.create({
                 data: {
                     assignmentId: assignment.id,
                     photoBeforeUrl: photoBeforeUrl,
                     photoAfterUrl: photoAfterUrl,
                     installerId: assignment.installerId,
+                    status: ApprovalStatus.PENDING, // Aguarda aprovação do admin
                 }
             });
 
-            // Atualiza a atribuição para o status 'installed'
+            // 4. Atualiza a atribuição para 'awaiting_approval'
+            // O motorista fez a parte dele, agora aguarda o admin.
             const updatedAssignment = await tx.assignment.update({
                 where: { id: assignment.id },
                 data: {
-                    status: AssignmentStatus.installed,
-                    installedAt: new Date(),
+                    status: AssignmentStatus.awaiting_approval,
                 }
             });
 
