@@ -36,4 +36,4 @@ EXPOSE 3000
 
 # O comando para iniciar a aplicação
 # (Vamos sobrepor isto no Railway para incluir as migrações)
-CMD ["node", "dist/main"]
+CMD ["node", "main"]
