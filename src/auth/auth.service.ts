@@ -49,7 +49,7 @@ export class AuthService {
     /**
      * Verifica o OTP e, se válido, cria ou encontra o utilizador e gera os tokens.
      */
-    async verifyOtpAndSignTokens(phone: string, otp: string) {
+    async verifyOtpAndSignTokens(phone: string, otp: string, role?: Role) {
         // 1. Busca o desafio no banco de dados
         const challenge = await this.prisma.otpChallenge.findUnique({
             where: { phone },
@@ -65,9 +65,18 @@ export class AuthService {
 
         // --- A partir daqui, o fluxo segue normal ---
         let user = await this.prisma.user.findUnique({ where: { phone } });
-        if (!user) {
-            user = await this.prisma.user.create({ data: { phone, role: Role.driver } });
-        }
+
+            if (!user) {
+            // --- ESTA É A MUDANÇA ---
+            // Se o utilizador é novo, usamos o 'role' enviado pelo frontend.
+            // Se o frontend não enviar (ex: versão antiga do app), usamos 'driver' como fallback.
+            user = await this.prisma.user.create({
+                data: {
+                phone,
+                role: role || Role.driver, // Usa o role do DTO ou o default
+                },
+            });
+            }
 
         return this._generateAndStoreTokens(user);
     }

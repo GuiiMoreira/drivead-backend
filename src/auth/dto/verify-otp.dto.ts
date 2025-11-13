@@ -1,12 +1,17 @@
-import { IsNotEmpty, IsPhoneNumber, IsString, Length } from 'class-validator';
+import { IsNotEmpty, IsPhoneNumber, IsString, Length, IsEnum, IsOptional } from 'class-validator';
+import { Role } from '@prisma/client'; // Importe o Enum Role
 
 export class VerifyOtpDto {
-    @IsNotEmpty({ message: 'O número de telemóvel não pode estar vazio.' })
-    @IsPhoneNumber('BR', { message: 'Por favor, insira um número de telemóvel válido.' })
-    phone: string;
+  @IsNotEmpty()
+  @IsPhoneNumber('BR')
+  phone: string;
 
-    @IsNotEmpty({ message: 'O código OTP não pode estar vazio.' })
-    @IsString()
-    @Length(6, 6, { message: 'O código OTP deve ter 6 dígitos.' })
-    otp: string;
+  @IsNotEmpty()
+  @IsString()
+  @Length(6, 6)
+  otp: string;
+
+  @IsEnum(Role)
+  @IsOptional() // O role é opcional
+  role?: Role; // Ex: 'driver' ou 'advertiser'
 }

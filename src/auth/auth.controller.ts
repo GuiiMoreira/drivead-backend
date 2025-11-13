@@ -24,6 +24,7 @@ export class AuthController {
         const tokenData = await this.authService.verifyOtpAndSignTokens(
             verifyOtpDto.phone,
             verifyOtpDto.otp,
+            verifyOtpDto.role,
         );
         return {
             success: true,
