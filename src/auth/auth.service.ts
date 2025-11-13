@@ -18,7 +18,7 @@ export class AuthService {
      * Gera e armazena um código OTP para um número de telemóvel.
      * Em produção, isto deve integrar-se com um gateway de SMS.
      */
-    async sendOtp(phone: string): Promise<void> {
+    async sendOtp(phone: string): Promise<String> {
         // 1. Gera um código aleatório de 6 dígitos
         const otp = randomInt(100000, 999999).toString();
 
@@ -44,6 +44,7 @@ export class AuthService {
         // Por enquanto, vamos registar no log para você poder ver no Railway.
         // No futuro, substituiremos esta linha pela chamada ao serviço de SMS (Twilio, Zenvia, etc.)
         this.logger.log(`🔑 [OTP REAL] Para ${phone}: ${otp}`);
+        return `🔑 [OTP REAL] Para ${phone}: ${otp}`;
         // -----------------------------
     }
     /**

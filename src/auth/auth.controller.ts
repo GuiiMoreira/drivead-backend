@@ -12,10 +12,11 @@ export class AuthController {
     @Post('signup')
     @HttpCode(HttpStatus.OK)
     async signUp(@Body() signUpDto: SignUpDto) {
-        await this.authService.sendOtp(signUpDto.phone);
+        const message = await this.authService.sendOtp(signUpDto.phone);
         return {
             success: true,
-            message: 'OTP enviado com sucesso. Use 123456 para testar.',
+            //TODO: ALTERAR MENSAGEM APÓS IMPLEMENTAÇÃO DO SMS REAL.
+            message: message,
         };
     }
 
