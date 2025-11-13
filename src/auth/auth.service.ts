@@ -50,38 +50,49 @@ export class AuthService {
     /**
      * Verifica o OTP e, se válido, cria ou encontra o utilizador e gera os tokens.
      */
-    async verifyOtpAndSignTokens(phone: string, otp: string, role?: Role) {
+   async verifyOtpAndSignTokens(phone: string, otp: string, role?: Role) {
         // 1. Busca o desafio no banco de dados
         const challenge = await this.prisma.otpChallenge.findUnique({
-            where: { phone },
+        where: { phone },
         });
 
         // 2. Verifica se existe, se o código bate e se não expirou
+        //    A condição de teste foi removida.
         if (!challenge || challenge.otpCode !== otp || new Date() > challenge.expiresAt) {
-            throw new UnauthorizedException('Código OTP inválido ou expirado.');
+        throw new UnauthorizedException('Código OTP inválido ou expirado.');
         }
 
-        // 3. Se passou, apaga o desafio para não ser usado novamente
+        // 3. Apaga o desafio para não ser usado novamente
         await this.prisma.otpChallenge.delete({ where: { phone } });
 
         // --- A partir daqui, o fluxo segue normal ---
         let user = await this.prisma.user.findUnique({ where: { phone } });
 
-            if (!user) {
-            // --- ESTA É A MUDANÇA ---
-            // Se o utilizador é novo, usamos o 'role' enviado pelo frontend.
-            // Se o frontend não enviar (ex: versão antiga do app), usamos 'driver' como fallback.
-            user = await this.prisma.user.create({
-                data: {
-                phone,
-                role: role || Role.driver, // Usa o role do DTO ou o default
-                },
-            });
-            }
+        const isNewUser: boolean = !user;
 
-        return this._generateAndStoreTokens(user);
+        if (!user) {
+        user = await this.prisma.user.create({
+            data: {
+            phone,
+            role: role || Role.driver,
+            },
+        });
+        }
+
+        // 4. Geramos os tokens como antes
+        const tokens = await this._generateAndStoreTokens(user);
+
+        // 5. Montamos a resposta final, ADICIONANDO a flag 'isNewUser'
+        return {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        user: {
+            id: user.id,
+            role: user.role,
+            isNewUser: isNewUser,
+        },
+        };
     }
-
     /**
      * NOVO MÉTODO: Lida com a requisição de refresh.
      */
