@@ -55,12 +55,13 @@ export class CampaignsController {
 
     // Endpoint útil para verificar o estado de uma campanha
     @Get(':id')
-    @UseGuards(AuthGuard('jwt')) // Qualquer utilizador autenticado pode ver detalhes (ajustar regras se necessário)
-    async getCampaignDetails(@Param('id', ParseUUIDPipe) id: string) {
-        const campaign = await this.prisma.campaign.findUnique({ where: { id } }); // Adicionado para simplicidade, pode mover para o serviço
-        if (!campaign) {
-            throw new NotFoundException(`Campanha com ID "${id}" não encontrada.`);
-        }
+    @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+    async getCampaignDetails(
+        @Req() req,
+        @Param('id', ParseUUIDPipe) id: string,
+    ) {
+        const user = req.user as User;
+        const campaign = await this.campaignsService.getCampaignDetails(id, user);
         return {
             success: true,
             data: campaign,

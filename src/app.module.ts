@@ -13,6 +13,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { StorageModule } from './storage/storage.module';
 import { PaymentsModule } from './payments/payments.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { UsersModule } from './users/users.module';
+import { AdvertisersModule } from './advertisers/advertisers.module';
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     StorageModule,
     PaymentsModule,
     WebhooksModule,
+    UsersModule,
+    AdvertisersModule,
   ],
   controllers: [],
   providers: [],

@@ -61,6 +61,30 @@ export class CampaignsService {
         return { campaign, priceData };
     }
 
+    async getCampaignDetails(campaignId: string, user: User) {
+        const advertiser = await this.prisma.advertiser.findUnique({
+            where: { userId: user.id },
+        });
+
+        if (!advertiser) {
+            throw new ForbiddenException('Perfil de anunciante não encontrado para este utilizador.');
+        }
+
+        const campaign = await this.prisma.campaign.findUnique({
+            where: { id: campaignId },
+        });
+
+        if (!campaign) {
+            throw new NotFoundException(`Campanha com ID "${campaignId}" não encontrada.`);
+        }
+
+        if (campaign.advertiserId !== advertiser.id) {
+            throw new ForbiddenException('Você não tem permissão para aceder a esta campanha.');
+        }
+
+        return campaign;
+    }
+
     /**
   * Ativa uma campanha, simulando um pagamento bem-sucedido.
   * Altera o status da campanha de 'draft' para 'active'.
