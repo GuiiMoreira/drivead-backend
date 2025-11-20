@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Param, ParseUUIDPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Param, ParseUUIDPipe, NotFoundException, UploadedFile, BadRequestException, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
@@ -8,6 +8,7 @@ import { User } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
 import { PaymentsService } from '../payments/payments.service';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('campaigns')
 export class CampaignsController {
