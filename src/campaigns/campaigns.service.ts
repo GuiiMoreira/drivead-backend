@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { User, CampaignStatus } from '@prisma/client';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
+import { StorageService } from '../storage/storage.service';
 
 export enum ExposureLevel {
     BASIC = 'BASIC',
@@ -12,15 +13,23 @@ export enum ExposureLevel {
 
 @Injectable()
 export class CampaignsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService, // <-- Injetar StorageService
+  ) {}
 
-    async createCampaign(user: User, createCampaignDto: CreateCampaignDto) {
+    async createCampaign(user: User, createCampaignDto: CreateCampaignDto, file: Express.Multer.File) {
         // 1. Encontra ou cria o perfil de anunciante
         const advertiser = await this.prisma.advertiser.upsert({
             where: { userId: user.id },
             update: {},
             create: { userId: user.id },
         });
+
+        const fileUrl = await this.storageService.uploadFile(
+        file, 
+        `campaigns/${advertiser.id}/creatives`
+        );
 
         // 2. Chama a nossa função de cálculo de preço com os dados do DTO
         const priceData = this.calculatePrice({
@@ -52,7 +61,7 @@ export class CampaignsService {
                     targetCategory: priceData.selectedLowestCategory, // Guardamos a categoria base do preço
                     exposureLevel: createCampaignDto.exposureLevel,
                 } as any,
-                creativeUrl: createCampaignDto.creative.file_url,
+                creativeUrl: fileUrl,
                 status: CampaignStatus.draft,
             },
         });
