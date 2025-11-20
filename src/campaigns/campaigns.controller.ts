@@ -15,11 +15,28 @@ export class CampaignsController {
         private prisma: PrismaService,
         private readonly paymentsService: PaymentsService,) { }
 
-    @Post()
+   @Post()
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
-    async createCampaign(@Req() req, @Body() createCampaignDto: CreateCampaignDto) {
+    @UseInterceptors(FileInterceptor('file')) // <-- Intercepta o campo 'file'
+    async createCampaign(
+        @Req() req, 
+        @Body() body: { data: string }, // Recebe o JSON como string no campo 'data'
+        @UploadedFile() file: Express.Multer.File // Recebe o arquivo
+    ) {
+        if (!file) {
+            throw new BadRequestException('A imagem do criativo é obrigatória.');
+        }
+
+        let createCampaignDto: CreateCampaignDto;
+        try {
+            createCampaignDto = JSON.parse(body.data);
+        } catch (e) {
+            throw new BadRequestException('Formato de dados inválido.');
+        }
+
         const user = req.user as User;
-        const { campaign, priceData } = await this.campaignsService.createCampaign(user, createCampaignDto);
+        
+        const { campaign, priceData } = await this.campaignsService.createCampaign(user, createCampaignDto, file);
 
         return {
             success: true,
