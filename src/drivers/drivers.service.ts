@@ -451,4 +451,19 @@ export class DriversService {
             };
         });
     }
+
+    async getMyVehicles(user: User) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+      include: {
+        vehicles: true, // Traz os veículos associados
+      },
+    });
+
+    if (!driver) {
+      throw new NotFoundException('Perfil de motorista não encontrado.');
+    }
+
+    return driver.vehicles;
+  }
 }
