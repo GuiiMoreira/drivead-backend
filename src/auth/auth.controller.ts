@@ -33,16 +33,17 @@ export class AuthController {
         };
     }
 
-    @UseGuards(AuthGuard('jwt'))
-    @Get('me')
-    getProfile(@Req() req) {
-        // `req.user` é preenchido pela JwtStrategy após validar o token com sucesso.
-        // A nossa estratégia retorna o objeto de utilizador completo.
-        return {
-            success: true,
-            data: req.user,
-        };
-    }
+@UseGuards(AuthGuard('jwt'))
+  @Get('me')
+  async getProfile(@Req() req) {
+    // Chamamos um método no serviço para buscar os dados completos
+    const userProfile = await this.authService.getMe(req.user.id);
+    
+    return {
+      success: true,
+      data: userProfile,
+    };
+  }
 
     /**
   * NOVO ENDPOINT: Recebe um refresh token e retorna um novo par de tokens.
