@@ -200,4 +200,21 @@ export class AuthService {
 
         return user;
     }
+
+    async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        driver: {
+          include: { vehicles: true } // Opcional: já trazer o veículo no login
+        }, 
+        advertiser: true,
+      },
+    });
+
+    if (!user) throw new UnauthorizedException('Utilizador não encontrado.');
+
+    // Limpa campos desnecessários se quiser, ou retorna tudo
+    return user;
+  }
 }
