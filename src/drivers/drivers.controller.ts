@@ -180,4 +180,14 @@ export class DriversController {
             data: result,
         };
     }
+
+    @Get('me/vehicles')
+  @UseGuards(AuthGuard('jwt'), DriverGuard)
+  async getMyVehicles(@Req() req) {
+    const vehicles = await this.driversService.getMyVehicles(req.user as User);
+    return {
+      success: true,
+      data: vehicles,
+    };
+  }
 }
