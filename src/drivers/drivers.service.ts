@@ -267,11 +267,24 @@ export class DriversService {
         const assignment = await this.prisma.assignment.findFirst({
             where: {
                 driver: { userId: user.id },
-                status: AssignmentStatus.assigned,
+                status: {
+                    in: [
+                        AssignmentStatus.assigned,
+                        AssignmentStatus.accepted,
+                        AssignmentStatus.scheduled,
+                        AssignmentStatus.installed,
+                        AssignmentStatus.awaiting_approval,
+                        AssignmentStatus.active
+                    ]
+                },
             },
             include: {
                 campaign: true, // Inclui detalhes da campanha
             },
+                       // Ordena pela data de atualização para pegar o mais recente se houver conflito
+            orderBy: {
+                updatedAt: 'desc'
+            }
         });
 
         if (!assignment) {
