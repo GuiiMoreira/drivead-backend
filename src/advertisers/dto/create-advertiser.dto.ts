@@ -1,16 +1,45 @@
-import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, IsBoolean, IsNumber, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { CompanyType } from '@prisma/client';
+
+class AddressDto {
+  @IsString() @IsNotEmpty() logradouro: string;
+  @IsString() @IsNotEmpty() numero: string;
+  @IsString() @IsOptional() complemento?: string;
+  @IsString() @IsNotEmpty() bairro: string;
+  @IsString() @IsNotEmpty() cidade: string;
+  @IsString() @IsNotEmpty() estado: string;
+  @IsString() @IsNotEmpty() cep: string;
+}
 
 export class CreateAdvertiserDto {
-  @IsString()
+  // Dados da Empresa
+  @IsEnum(CompanyType)
   @IsNotEmpty()
-  name: string;
+  tipo_empresa: CompanyType;
 
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
+  @IsString() @IsNotEmpty()
+  cnpj: string;
 
-  @IsString()
+  @IsString() @IsNotEmpty()
+  razao_social: string;
+
+  @IsString() @IsNotEmpty()
+  nome_fantasia: string;
+
+  @IsString() @IsOptional()
+  segmento?: string;
+
+  // Endereço
+  @ValidateNested()
+  @Type(() => AddressDto)
   @IsNotEmpty()
-  @Length(11, 18) // CPF (11) or CNPJ (14) with punctuation
-  cpfOrCnpj: string;
+  endereco: AddressDto;
+
+  // Configurações
+  @IsNumber() @IsOptional()
+  limite_orcamento_mensal?: number;
+
+  @IsBoolean() @IsNotEmpty()
+  modo_agencia: boolean;
 }

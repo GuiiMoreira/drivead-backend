@@ -5,12 +5,15 @@ import {
   UseGuards,
   Req,
   Get,
+  Post
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdvertisersService } from './advertisers.service';
 import { UpdateAdvertiserDto } from './dto/update-advertiser.dto';
 import { User } from '@prisma/client';
 import { AdvertiserGuard } from '../core/guards/advertiser.guard';
+import { CreateAdvertiserDto } from './dto/create-advertiser.dto';
+import { InviteMemberDto } from './dto/invite-member.dto';
 
 @Controller('advertisers')
 export class AdvertisersController {
@@ -42,5 +45,17 @@ export class AdvertisersController {
       success: true,
       data: updatedAdvertiser,
     };
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  create(@Req() req, @Body() dto: CreateAdvertiserDto) {
+    return this.advertisersService.createAdvertiser(req.user as User, dto);
+  }
+
+  @Post('members/invite')
+  @UseGuards(AuthGuard('jwt'))
+  invite(@Req() req, @Body() dto: InviteMemberDto) {
+    return this.advertisersService.inviteMember(req.user as User, dto);
   }
 }
