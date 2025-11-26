@@ -17,69 +17,105 @@ datasource db {
 
 // Modelo de Usuários (base para todos os perfis)
 model User {
-  id        String   @id @default(uuid())
-  phone     String   @unique
-  email     String?
-  name      String?
-  role      Role
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id       String  @id @default(uuid())
+  phone    String  @unique
+  email    String?
+  name     String?
+  // Role genérica do sistema (admin, advertiser, driver)
+  role     Role
+  isActive Boolean @default(true)
 
-  advertiser    Advertiser?
+  // --- ESTRUTURA DE EQUIPE (ANUNCIANTE) ---
+  advertiserId    String?
+  advertiser      Advertiser?      @relation(fields: [advertiserId], references: [id])
+  teamRole        AdvertiserRole? // Cargo na empresa (ex: Financeiro)
+  permissionLevel PermissionLevel? // Nível de acesso (ex: ADMIN, MANAGER)
+  lastLogin       DateTime?        @default(now())
+  // ----------------------------------------
+
   driver        Driver?
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// Modelo de Anunciantes
+// Modelo de Anunciantes (A Empresa/Organização)
 model Advertiser {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName  String?
-  cnpj         String?
-  billingInfo  Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id String @id @default(uuid())
 
+  // --- DADOS EMPRESARIAIS ---
+  type         CompanyType
+  cnpj         String      @unique
+  razaoSocial  String
+  nomeFantasia String
+  segmento     String?
+
+  // --- ENDEREÇO ---
+  logradouro  String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  estado      String
+  cep         String
+
+  // --- CONFIGURAÇÕES ---
+  budgetLimit  Float? // limite_orcamento_mensal
+  isAgencyMode Boolean @default(false)
+
+  // --- DOCUMENTOS (URLs) ---
+  docCartaoCnpjUrl     String?
+  docContratoSocialUrl String?
+  docResponsavelUrl    String?
+
+  // Status da Validação da Empresa
+  validationStatus DocValidationStatus @default(PENDENTE)
+  rejectionReason  String?
+
+  // --- RELACIONAMENTOS ---
+  users     User[] // Array de membros da equipe
   campaigns Campaign[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Modelo de Motoristas
 model Driver {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   cpf            String?
   cnh            String?
   crlv           String?
   kycStatus      KycStatus @default(pending)
-  optInPolitical Boolean  @default(false)
-  rating         Float?   @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  optInPolitical Boolean   @default(false)
+  rating         Float?    @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   vehicles     Vehicle[]
   assignments  Assignment[]
   positions    Position[]
   kycDocuments KycDocument[]
-  wallet DriverWallet?
+  wallet       DriverWallet?
 }
 
 // Modelo de Veículos
 model Vehicle {
-  id        String   @id @default(uuid())
+  id        String          @id @default(uuid())
   driverId  String
-  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  plate     String   @unique
+  driver    Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  plate     String          @unique
   model     String?
   year      Int?
   color     String?
   category  VehicleCategory @default(ESSENTIAL)
-  photos    Json? 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  photos    Json?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   assignments Assignment[]
 }
@@ -126,14 +162,14 @@ model Assignment {
   removedAt          DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
-  payoutProcessedAt DateTime?
+  payoutProcessedAt  DateTime?
 
-  dailyMetrics DailyAssignmentMetric[] 
-  installProofs InstallProof[]
-  positions     Position[]
-  payments      Payment[]
+  dailyMetrics   DailyAssignmentMetric[]
+  installProofs  InstallProof[]
+  positions      Position[]
+  payments       Payment[]
   periodicProofs PeriodicProof[]
-  proofStatus ProofRequestStatus @default(NONE)
+  proofStatus    ProofRequestStatus      @default(NONE)
 }
 
 model DailyAssignmentMetric {
@@ -149,12 +185,12 @@ model DailyAssignmentMetric {
 }
 
 model DriverWallet {
-  id        String    @id @default(uuid())
-  driverId  String    @unique
-  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  balance   Float     @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  driverId  String   @unique
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   transactions WalletTransaction[]
 }
@@ -176,14 +212,14 @@ model WalletTransaction {
 
 // Modelo de Instaladores (Parceiros)
 model Installer {
-  id          String   @id @default(uuid())
-  companyName String?
-  phone       String?
-  areas       Json?
-  address       String?
+  id           String   @id @default(uuid())
+  companyName  String?
+  phone        String?
+  areas        Json?
+  address      String?
   priceInstall Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   assignments   Assignment[]
   installProofs InstallProof[]
@@ -201,17 +237,29 @@ model InstallProof {
   exif           Json?
   createdAt      DateTime   @default(now())
 
-  status      ApprovalStatus @default(PENDING) // 
-  adminNotes  String?                          // Para o admin dizer pq rejeitou
-  reviewedAt  DateTime?
+  status     ApprovalStatus @default(PENDING) // 
+  adminNotes String? // Para o admin dizer pq rejeitou
+  reviewedAt DateTime?
+
+  @@index([assignmentId])
+}
+
+model PeriodicProof {
+  id           String    @id @default(uuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  photoUrl     String
+  proofType    ProofType // Ex: 'random' ou 'final'
+  createdAt    DateTime  @default(now())
+
+  status     ApprovalStatus @default(PENDING)
+  adminNotes String?
+  reviewedAt DateTime?
 
   @@index([assignmentId])
 }
 
 // Modelo de Posições (Pings de GPS)
-// NOTA: O tipo `geometry` do PostGIS não é nativo no Prisma.
-// A abordagem recomendada é armazenar lat/lon como Float e usar Raw Queries ($queryRaw)
-// para operações geoespaciais complexas, aproveitando os índices do PostGIS.
 model Position {
   id           BigInt      @id @default(autoincrement())
   assignmentId String?
@@ -264,7 +312,7 @@ model AuditLog {
   @@index([actorUserId])
 }
 
-// Modelo de Documentos KYC
+// Modelo de Documentos KYC (Motorista)
 model KycDocument {
   id         String    @id @default(uuid())
   driverId   String
@@ -287,12 +335,12 @@ model OtpChallenge {
 
 // Modelo para Refresh Tokens
 model RefreshToken {
-  id         String    @id @default(uuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String    @unique 
-  createdAt  DateTime  @default(now())
-  revokedAt  DateTime?
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
 
   @@index([userId])
 }
@@ -307,6 +355,35 @@ enum Role {
   driver
   installer
 }
+
+// --- NOVOS ENUMS PARA ESTRUTURA DE ANUNCIANTE ---
+enum CompanyType {
+  PJ
+  MEI
+  AGENCIA
+  PROFISSIONAL_LIBERAL
+}
+
+enum AdvertiserRole {
+  ADMINISTRADOR
+  GESTOR_MARKETING
+  FINANCEIRO
+  OPERACIONAL
+}
+
+enum PermissionLevel {
+  ADMIN // Acesso total
+  MANAGER // Criar/Editar campanhas
+  VIEWER // Apenas relatórios
+}
+
+enum DocValidationStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
+}
+
+// ------------------------------------------------
 
 enum KycStatus {
   pending
@@ -328,10 +405,10 @@ enum CampaignStatus {
 }
 
 enum AssignmentStatus {
-assigned
+  assigned
   accepted
   awaiting_approval
-  installed         
+  installed
   active
   removed
   fraud
@@ -357,21 +434,6 @@ enum VehicleCategory {
 enum TransactionType {
   CREDIT
   DEBIT
-}
-
-model PeriodicProof {
-  id           String    @id @default(uuid())
-  assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  photoUrl     String
-  proofType    ProofType // Ex: 'random' ou 'final'
-  createdAt    DateTime  @default(now())
-
-  status      ApprovalStatus @default(PENDING)
-  adminNotes  String?                          
-  reviewedAt  DateTime?                        
-
-  @@index([assignmentId])
 }
 
 enum ProofType {
