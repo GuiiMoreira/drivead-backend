@@ -1,459 +1,793 @@
 // =================================================================
+
 // ESQUEMA PRISMA PARA O PROJETO DRIVEAD
+
 // =================================================================
+
+
 
 generator client {
+
   provider = "prisma-client-js"
+
 }
+
+
 
 datasource db {
+
   provider = "postgresql"
+
   url      = env("DATABASE_URL")
+
 }
 
+
+
 // =================================================================
+
 // 1. MODELOS PRINCIPAIS (CORE MODELS)
+
 // =================================================================
+
+
 
 // Modelo de Usuários (base para todos os perfis)
-model User {
-  id       String  @id @default(uuid())
-  phone    String  @unique
-  email    String?
-  name     String?
-  // Role genérica do sistema (admin, advertiser, driver)
-  role     Role
-  isActive Boolean @default(true)
 
-  // --- ESTRUTURA DE EQUIPE (ANUNCIANTE) ---
-  advertiserId    String?
-  advertiser      Advertiser?      @relation(fields: [advertiserId], references: [id])
-  teamRole        AdvertiserRole? // Cargo na empresa (ex: Financeiro)
-  permissionLevel PermissionLevel? // Nível de acesso (ex: ADMIN, MANAGER)
-  lastLogin       DateTime?        @default(now())
-  // ----------------------------------------
+model User {
+
+  id        String   @id @default(uuid())
+
+  phone     String   @unique
+
+  email     String?
+
+  name      String?
+
+  role      Role
+
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+
+
+  advertiser    Advertiser?
 
   driver        Driver?
+
   auditLogs     AuditLog[]
+
   refreshTokens RefreshToken[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
-// Modelo de Anunciantes (A Empresa/Organização)
+
+
+// Modelo de Anunciantes
+
 model Advertiser {
-  id String @id @default(uuid())
 
-  // --- DADOS EMPRESARIAIS ---
-  type         CompanyType
-  cnpj         String      @unique
-  razaoSocial  String
-  nomeFantasia String
-  segmento     String?
-
-  // --- ENDEREÇO ---
-  logradouro  String
-  numero      String
-  complemento String?
-  bairro      String
-  cidade      String
-  estado      String
-  cep         String
-
-  // --- CONFIGURAÇÕES ---
-  budgetLimit  Float? // limite_orcamento_mensal
-  isAgencyMode Boolean @default(false)
-
-  // --- DOCUMENTOS (URLs) ---
-  docCartaoCnpjUrl     String?
-  docContratoSocialUrl String?
-  docResponsavelUrl    String?
-
-  // Status da Validação da Empresa
-  validationStatus DocValidationStatus @default(PENDENTE)
-  rejectionReason  String?
-
-  // --- RELACIONAMENTOS ---
-  users     User[] // Array de membros da equipe
-  campaigns Campaign[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// Modelo de Motoristas
-model Driver {
-  id             String    @id @default(uuid())
-  userId         String    @unique
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cpf            String?
-  cnh            String?
-  crlv           String?
-  kycStatus      KycStatus @default(pending)
-  optInPolitical Boolean   @default(false)
-  rating         Float?    @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  vehicles     Vehicle[]
-  assignments  Assignment[]
-  positions    Position[]
-  kycDocuments KycDocument[]
-  wallet       DriverWallet?
-}
-
-// Modelo de Veículos
-model Vehicle {
-  id        String          @id @default(uuid())
-  driverId  String
-  driver    Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  plate     String          @unique
-  model     String?
-  year      Int?
-  color     String?
-  category  VehicleCategory @default(ESSENTIAL)
-  photos    Json?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-
-  assignments Assignment[]
-}
-
-// Modelo de Campanhas
-model Campaign {
-  id           String         @id @default(uuid())
-  advertiserId String
-  advertiser   Advertiser     @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
-  title        String
-  type         CampaignType
-  areaGeojson  Json?
-  startAt      DateTime
-  endAt        DateTime
-  budget       Float
-  numCars      Int            @default(1)
-  creativeUrl  String?
-  requirements Json?
-  status       CampaignStatus @default(draft)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  assignments Assignment[]
-  payments    Payment[]
-}
-
-// Modelo de Atribuições (o elo entre Motorista e Campanha)
-model Assignment {
-  id                 String           @id @default(uuid())
-  campaignId         String
-  campaign           Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  driverId           String
-  driver             Driver           @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  vehicleId          String
-  vehicle            Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  installerId        String?
-  installer          Installer?       @relation(fields: [installerId], references: [id])
-  status             AssignmentStatus @default(assigned)
-  priceAgreed        Float?
-  payoutAmount       Float?
-  scheduledInstallAt DateTime?
-  acceptedAt         DateTime?
-  installedAt        DateTime?
-  removedAt          DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  payoutProcessedAt  DateTime?
-
-  dailyMetrics   DailyAssignmentMetric[]
-  installProofs  InstallProof[]
-  positions      Position[]
-  payments       Payment[]
-  periodicProofs PeriodicProof[]
-  proofStatus    ProofRequestStatus      @default(NONE)
-}
-
-model DailyAssignmentMetric {
-  id                  String     @id @default(uuid())
-  assignmentId        String
-  assignment          Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  date                DateTime   @db.Date
-  kilometersDriven    Float      @default(0)
-  timeInMotionSeconds Int        @default(0)
-  createdAt           DateTime   @default(now())
-
-  @@unique([assignmentId, date]) // Garante apenas um registo por dia por atribuição
-}
-
-model DriverWallet {
-  id        String   @id @default(uuid())
-  driverId  String   @unique
-  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  balance   Float    @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  transactions WalletTransaction[]
-}
-
-model WalletTransaction {
-  id          String            @id @default(uuid())
-  walletId    String
-  wallet      DriverWallet      @relation(fields: [walletId], references: [id])
-  amount      Float
-  type        TransactionType // 'CREDIT' ou 'DEBIT'
-  status      TransactionStatus @default(COMPLETED)
-  description String
-  createdAt   DateTime          @default(now())
-}
-
-// =================================================================
-// 2. MODELOS DE SUPORTE E FLUXOS
-// =================================================================
-
-// Modelo de Instaladores (Parceiros)
-model Installer {
   id           String   @id @default(uuid())
+
+  userId       String   @unique
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   companyName  String?
-  phone        String?
-  areas        Json?
-  address      String?
-  priceInstall Float?
+
+  cnpj         String?
+
+  billingInfo  Json?
+
   createdAt    DateTime @default(now())
+
   updatedAt    DateTime @updatedAt
 
-  assignments   Assignment[]
+
+
+  campaigns Campaign[]
+
+}
+
+
+
+// Modelo de Motoristas
+
+model Driver {
+
+  id             String   @id @default(uuid())
+
+  userId         String   @unique
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  cpf            String?
+
+  cnh            String?
+
+  crlv           String?
+
+  kycStatus      KycStatus @default(pending)
+
+  optInPolitical Boolean  @default(false)
+
+  rating         Float?   @default(0)
+
+  createdAt      DateTime @default(now())
+
+  updatedAt      DateTime @updatedAt
+
+
+
+  vehicles     Vehicle[]
+
+  assignments  Assignment[]
+
+  positions    Position[]
+
+  kycDocuments KycDocument[]
+
+  wallet DriverWallet?
+
+}
+
+
+
+// Modelo de Veículos
+
+model Vehicle {
+
+  id        String   @id @default(uuid())
+
+  driverId  String
+
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  plate     String   @unique
+
+  model     String?
+
+  year      Int?
+
+  color     String?
+
+  category  VehicleCategory @default(ESSENTIAL)
+
+  photos    Json? 
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+
+
+  assignments Assignment[]
+
+}
+
+
+
+// Modelo de Campanhas
+
+model Campaign {
+
+  id           String         @id @default(uuid())
+
+  advertiserId String
+
+  advertiser   Advertiser     @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+
+  title        String
+
+  type         CampaignType
+
+  areaGeojson  Json?
+
+  startAt      DateTime
+
+  endAt        DateTime
+
+  budget       Float
+
+  numCars      Int            @default(1)
+
+  creativeUrl  String?
+
+  requirements Json?
+
+  status       CampaignStatus @default(draft)
+
+  createdAt    DateTime       @default(now())
+
+  updatedAt    DateTime       @updatedAt
+
+
+
+  assignments Assignment[]
+
+  payments    Payment[]
+
+}
+
+
+
+// Modelo de Atribuições (o elo entre Motorista e Campanha)
+
+model Assignment {
+
+  id                 String           @id @default(uuid())
+
+  campaignId         String
+
+  campaign           Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  driverId           String
+
+  driver             Driver           @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  vehicleId          String
+
+  vehicle            Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  installerId        String?
+
+  installer          Installer?       @relation(fields: [installerId], references: [id])
+
+  status             AssignmentStatus @default(assigned)
+
+  priceAgreed        Float?
+
+  payoutAmount       Float?
+
+  scheduledInstallAt DateTime?
+
+  acceptedAt         DateTime?
+
+  installedAt        DateTime?
+
+  removedAt          DateTime?
+
+  createdAt          DateTime         @default(now())
+
+  updatedAt          DateTime         @updatedAt
+
+  payoutProcessedAt DateTime?
+
+
+
+  dailyMetrics DailyAssignmentMetric[] 
+
   installProofs InstallProof[]
+
+  positions     Position[]
+
+  payments      Payment[]
+
+  periodicProofs PeriodicProof[]
+
+  proofStatus ProofRequestStatus @default(NONE)
+
 }
 
-// Modelo de Provas de Instalação
-model InstallProof {
-  id             String     @id @default(uuid())
-  assignmentId   String
-  assignment     Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  photoBeforeUrl String?
-  photoAfterUrl  String?
-  installerId    String?
-  installer      Installer? @relation(fields: [installerId], references: [id])
-  exif           Json?
-  createdAt      DateTime   @default(now())
 
-  status     ApprovalStatus @default(PENDING) // 
-  adminNotes String? // Para o admin dizer pq rejeitou
-  reviewedAt DateTime?
 
-  @@index([assignmentId])
+model DailyAssignmentMetric {
+
+  id                  String     @id @default(uuid())
+
+  assignmentId        String
+
+  assignment          Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  date                DateTime   @db.Date
+
+  kilometersDriven    Float      @default(0)
+
+  timeInMotionSeconds Int        @default(0)
+
+  createdAt           DateTime   @default(now())
+
+
+
+  @@unique([assignmentId, date]) // Garante apenas um registo por dia por atribuição
+
 }
 
-model PeriodicProof {
-  id           String    @id @default(uuid())
-  assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  photoUrl     String
-  proofType    ProofType // Ex: 'random' ou 'final'
-  createdAt    DateTime  @default(now())
 
-  status     ApprovalStatus @default(PENDING)
-  adminNotes String?
-  reviewedAt DateTime?
 
-  @@index([assignmentId])
+model DriverWallet {
+
+  id        String    @id @default(uuid())
+
+  driverId  String    @unique
+
+  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  balance   Float     @default(0)
+
+  createdAt DateTime  @default(now())
+
+  updatedAt DateTime  @updatedAt
+
+
+
+  transactions WalletTransaction[]
+
 }
 
-// Modelo de Posições (Pings de GPS)
-model Position {
-  id           BigInt      @id @default(autoincrement())
-  assignmentId String?
-  assignment   Assignment? @relation(fields: [assignmentId], references: [id])
-  driverId     String
-  driver       Driver      @relation(fields: [driverId], references: [id])
-  lat          Float
-  lon          Float
-  speed        Float?
-  ts           DateTime
-  createdAt    DateTime    @default(now())
 
-  @@index([driverId, ts(sort: Desc)])
-  @@index([assignmentId])
+
+model WalletTransaction {
+
+  id          String            @id @default(uuid())
+
+  walletId    String
+
+  wallet      DriverWallet      @relation(fields: [walletId], references: [id])
+
+  amount      Float
+
+  type        TransactionType // 'CREDIT' ou 'DEBIT'
+
+  status      TransactionStatus @default(COMPLETED)
+
+  description String
+
+  createdAt   DateTime          @default(now())
+
 }
 
-// Modelo de Pagamentos (de Anunciantes e para Motoristas)
-model Payment {
-  id           String        @id @default(uuid())
-  campaignId   String?
-  campaign     Campaign?     @relation(fields: [campaignId], references: [id])
-  assignmentId String?
-  assignment   Assignment?   @relation(fields: [assignmentId], references: [id])
-  amount       Float
-  platformFee  Float?
-  paidToDriver Float?
-  status       PaymentStatus @default(pending)
-  gatewayId    String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
 
-  @@index([status])
-}
 
 // =================================================================
-// 3. MODELOS DE SEGURANÇA E AUDITORIA
+
+// 2. MODELOS DE SUPORTE E FLUXOS
+
 // =================================================================
 
-// Modelo de Logs de Auditoria
-model AuditLog {
+
+
+// Modelo de Instaladores (Parceiros)
+
+model Installer {
+
   id          String   @id @default(uuid())
-  actorUserId String?
-  actorUser   User?    @relation(fields: [actorUserId], references: [id])
-  action      String
-  entityType  String?
-  entityId    String?
-  payload     Json?
+
+  companyName String?
+
+  phone       String?
+
+  areas       Json?
+
+  address       String?
+
+  priceInstall Float?
+
   createdAt   DateTime @default(now())
 
-  @@index([actorUserId])
+  updatedAt   DateTime @updatedAt
+
+
+
+  assignments   Assignment[]
+
+  installProofs InstallProof[]
+
 }
 
-// Modelo de Documentos KYC (Motorista)
+
+
+// Modelo de Provas de Instalação
+
+model InstallProof {
+
+  id             String     @id @default(uuid())
+
+  assignmentId   String
+
+  assignment     Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  photoBeforeUrl String?
+
+  photoAfterUrl  String?
+
+  installerId    String?
+
+  installer      Installer? @relation(fields: [installerId], references: [id])
+
+  exif           Json?
+
+  createdAt      DateTime   @default(now())
+
+
+
+  status      ApprovalStatus @default(PENDING) // 
+
+  adminNotes  String?                          // Para o admin dizer pq rejeitou
+
+  reviewedAt  DateTime?
+
+
+
+  @@index([assignmentId])
+
+}
+
+
+
+// Modelo de Posições (Pings de GPS)
+
+// NOTA: O tipo `geometry` do PostGIS não é nativo no Prisma.
+
+// A abordagem recomendada é armazenar lat/lon como Float e usar Raw Queries ($queryRaw)
+
+// para operações geoespaciais complexas, aproveitando os índices do PostGIS.
+
+model Position {
+
+  id           BigInt      @id @default(autoincrement())
+
+  assignmentId String?
+
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id])
+
+  driverId     String
+
+  driver       Driver      @relation(fields: [driverId], references: [id])
+
+  lat          Float
+
+  lon          Float
+
+  speed        Float?
+
+  ts           DateTime
+
+  createdAt    DateTime    @default(now())
+
+
+
+  @@index([driverId, ts(sort: Desc)])
+
+  @@index([assignmentId])
+
+}
+
+
+
+// Modelo de Pagamentos (de Anunciantes e para Motoristas)
+
+model Payment {
+
+  id           String        @id @default(uuid())
+
+  campaignId   String?
+
+  campaign     Campaign?     @relation(fields: [campaignId], references: [id])
+
+  assignmentId String?
+
+  assignment   Assignment?   @relation(fields: [assignmentId], references: [id])
+
+  amount       Float
+
+  platformFee  Float?
+
+  paidToDriver Float?
+
+  status       PaymentStatus @default(pending)
+
+  gatewayId    String?
+
+  createdAt    DateTime      @default(now())
+
+  updatedAt    DateTime      @updatedAt
+
+
+
+  @@index([status])
+
+}
+
+
+
+// =================================================================
+
+// 3. MODELOS DE SEGURANÇA E AUDITORIA
+
+// =================================================================
+
+
+
+// Modelo de Logs de Auditoria
+
+model AuditLog {
+
+  id          String   @id @default(uuid())
+
+  actorUserId String?
+
+  actorUser   User?    @relation(fields: [actorUserId], references: [id])
+
+  action      String
+
+  entityType  String?
+
+  entityId    String?
+
+  payload     Json?
+
+  createdAt   DateTime @default(now())
+
+
+
+  @@index([actorUserId])
+
+}
+
+
+
+// Modelo de Documentos KYC
+
 model KycDocument {
+
   id         String    @id @default(uuid())
+
   driverId   String
+
   driver     Driver    @relation(fields: [driverId], references: [id])
+
   docType    String // ex: cnh_front, crlv, selfie
+
   fileUrl    String
+
   status     KycStatus @default(pending)
+
   uploadedAt DateTime  @default(now())
 
+
+
   @@index([driverId])
+
 }
+
+
 
 // Modelo para Desafios OTP (Autenticação)
+
 model OtpChallenge {
+
   phone     String   @id
+
   otpCode   String
+
   createdAt DateTime @default(now())
+
   expiresAt DateTime
+
 }
+
+
 
 // Modelo para Refresh Tokens
+
 model RefreshToken {
-  id        String    @id @default(uuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  createdAt DateTime  @default(now())
-  revokedAt DateTime?
+
+  id         String    @id @default(uuid())
+
+  userId     String
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash  String    @unique 
+
+  createdAt  DateTime  @default(now())
+
+  revokedAt  DateTime?
+
+
 
   @@index([userId])
+
 }
 
+
+
 // =================================================================
+
 // 4. ENUMS (TIPOS E STATUS)
+
 // =================================================================
+
+
 
 enum Role {
+
   admin
+
   advertiser
+
   driver
+
   installer
+
 }
 
-// --- NOVOS ENUMS PARA ESTRUTURA DE ANUNCIANTE ---
-enum CompanyType {
-  PJ
-  MEI
-  AGENCIA
-  PROFISSIONAL_LIBERAL
-}
 
-enum AdvertiserRole {
-  ADMINISTRADOR
-  GESTOR_MARKETING
-  FINANCEIRO
-  OPERACIONAL
-}
-
-enum PermissionLevel {
-  ADMIN // Acesso total
-  MANAGER // Criar/Editar campanhas
-  VIEWER // Apenas relatórios
-}
-
-enum DocValidationStatus {
-  PENDENTE
-  APROVADO
-  REPROVADO
-}
-
-// ------------------------------------------------
 
 enum KycStatus {
+
   pending
+
   approved
+
   rejected
+
 }
+
+
 
 enum CampaignType {
+
   commercial
+
   political
+
 }
+
+
 
 enum CampaignStatus {
+
   draft
+
   pending_payment
+
   active
+
   finished
+
   cancelled
+
 }
+
+
 
 enum AssignmentStatus {
-  assigned
+
+assigned
+
   accepted
+
   awaiting_approval
-  installed
+
+  installed         
+
   active
+
   removed
+
   fraud
+
   finished
+
   rejected
+
 }
+
+
 
 enum PaymentStatus {
+
   pending
+
   completed
+
   failed
+
   refunded
+
 }
+
+
 
 enum VehicleCategory {
+
   ESSENTIAL // Antigo "POP"
+
   SMART
+
   PRIME
+
   PRO
+
   ECO
+
 }
+
+
 
 enum TransactionType {
+
   CREDIT
+
   DEBIT
+
 }
+
+
+
+model PeriodicProof {
+
+  id           String    @id @default(uuid())
+
+  assignmentId String
+
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  photoUrl     String
+
+  proofType    ProofType // Ex: 'random' ou 'final'
+
+  createdAt    DateTime  @default(now())
+
+
+
+  status      ApprovalStatus @default(PENDING)
+
+  adminNotes  String?                          
+
+  reviewedAt  DateTime?                        
+
+
+
+  @@index([assignmentId])
+
+}
+
+
 
 enum ProofType {
+
   RANDOM
+
   FINAL
+
 }
+
+
 
 enum TransactionStatus {
+
   PENDING
+
   COMPLETED
+
   FAILED
+
 }
+
+
 
 enum ProofRequestStatus {
+
   NONE
+
   PENDING_RANDOM
+
 }
 
+
+
 enum ApprovalStatus {
+
   PENDING
+
   APPROVED
+
   REJECTED
+
 }
