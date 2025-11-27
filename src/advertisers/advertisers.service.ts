@@ -7,14 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateAdvertiserDto } from './dto/update-advertiser.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
-import { Advertiser, User } from '@prisma/client';
+import { Advertiser, User, AdvertiserRole, PermissionLevel } from '@prisma/client';
 import { CreateAdvertiserDto } from './dto/create-advertiser.dto';
 
 @Injectable()
 export class AdvertisersService {
   constructor(private prisma: PrismaService) {}
 
-async createAdvertiser(user: User, dto: CreateAdvertiserDto) {
+  async createAdvertiser(user: User, dto: CreateAdvertiserDto) {
     // 1. Verifica se o usuário já tem uma empresa
     if (user.advertiserId) {
       throw new BadRequestException('Este usuário já pertence a uma empresa.');
@@ -67,16 +67,19 @@ async createAdvertiser(user: User, dto: CreateAdvertiserDto) {
   }
 
   async getCampaigns(userId: string) {
-    const advertiser = await this.prisma.advertiser.findUnique({
-      where: { userId },
+    // CORREÇÃO: Não podemos buscar Advertiser por userId.
+    // Primeiro buscamos o usuário para saber qual é a empresa dele.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { advertiserId: true },
     });
 
-    if (!advertiser) {
-      throw new NotFoundException('Advertiser not found.');
+    if (!user || !user.advertiserId) {
+      throw new NotFoundException('Anunciante não encontrado ou usuário sem empresa vinculada.');
     }
 
     return this.prisma.campaign.findMany({
-      where: { advertiserId: advertiser.id },
+      where: { advertiserId: user.advertiserId },
     });
   }
 
@@ -84,16 +87,18 @@ async createAdvertiser(user: User, dto: CreateAdvertiserDto) {
     userId: string,
     data: UpdateAdvertiserDto,
   ): Promise<Advertiser> {
-    const advertiser = await this.prisma.advertiser.findUnique({
-      where: { userId },
+    // CORREÇÃO: Mesma lógica aqui. Buscamos o advertiserId através do usuário.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { advertiserId: true },
     });
 
-    if (!advertiser) {
-      throw new NotFoundException('Advertiser not found.');
+    if (!user || !user.advertiserId) {
+      throw new NotFoundException('Anunciante não encontrado para este usuário.');
     }
 
     return this.prisma.advertiser.update({
-      where: { id: advertiser.id },
+      where: { id: user.advertiserId },
       data,
     });
   }
