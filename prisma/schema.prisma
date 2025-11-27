@@ -46,20 +46,20 @@ model Advertiser {
   id String @id @default(uuid())
 
   // --- DADOS EMPRESARIAIS ---
-  type         CompanyType
+  type         CompanyType?
   cnpj         String      @unique
-  razaoSocial  String
-  nomeFantasia String
+razaoSocial String?
+nomeFantasia String?
   segmento     String?
 
   // --- ENDEREÇO ---
-  logradouro  String
-  numero      String
+  logradouro  String?
+  numero      String?
   complemento String?
-  bairro      String
-  cidade      String
-  estado      String
-  cep         String
+  bairro      String?
+  cidade      String?
+  estado      String?
+  cep         String?
 
   // --- CONFIGURAÇÕES ---
   budgetLimit  Float? // limite_orcamento_mensal
