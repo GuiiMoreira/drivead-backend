@@ -88,7 +88,6 @@ export class AuthService {
         onboardingComplete = true; // O perfil de motorista existe!
       }
     } else if (user.role === Role.advertiser) {
-      // CORREÇÃO: Verificamos diretamente se o usuário tem o advertiserId preenchido
       if (user.advertiserId) {
         onboardingComplete = true;
       }
