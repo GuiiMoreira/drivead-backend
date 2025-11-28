@@ -123,60 +123,98 @@ export class CampaignsService {
     });
   }
 
-  async generateCampaignReport(user: User, campaignId: string) {
-    // CORREÇÃO 6: Mesma lógica de validação
-    if (!user.advertiserId) {
-        throw new ForbiddenException('Usuário não vinculado a uma empresa.');
-    }
-
+async generateCampaignReport(user: User, campaignId: string) {
+    // 1. Validações (permissão) - Mantém igual
+    if (!user.advertiserId) throw new ForbiddenException('Usuário não vinculado a uma empresa.');
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException(`Campanha não encontrada.`);
+    if (campaign.advertiserId !== user.advertiserId) throw new ForbiddenException('Acesso negado.');
 
-    if (!campaign) {
-      throw new NotFoundException(`Campanha com ID "${campaignId}" não encontrada.`);
-    }
-    
-    if (campaign.advertiserId !== user.advertiserId) {
-      throw new ForbiddenException('Você não tem permissão para aceder a esta campanha.');
-    }
-
-    // ... (Resto da lógica de agregação permanece igual, está correta)
+    // 2. Métricas Acumuladas
     const totalMetrics = await this.prisma.dailyAssignmentMetric.aggregate({
-        where: { assignment: { campaignId: campaignId } },
-        _sum: { kilometersDriven: true, timeInMotionSeconds: true },
+      where: { assignment: { campaignId } },
+      _sum: { kilometersDriven: true, timeInMotionSeconds: true },
+      _avg: { timeInMotionSeconds: true } // Média de tempo
     });
 
     const totalKm = totalMetrics._sum.kilometersDriven || 0;
-    const totalTimeExposedHours = (totalMetrics._sum.timeInMotionSeconds || 0) / 3600;
-
-    const driverMetrics = await this.prisma.dailyAssignmentMetric.groupBy({
-        by: ['assignmentId'],
-        where: { assignment: { campaignId: campaignId } },
-        _sum: { kilometersDriven: true },
-    });
-
-    const assignmentsDetails = await this.prisma.assignment.findMany({
-        where: { id: { in: driverMetrics.map(m => m.assignmentId) } },
-        select: { id: true, driverId: true }
-    });
-
-    const driverBreakdown = driverMetrics.map(metric => {
-        const detail = assignmentsDetails.find(d => d.id === metric.assignmentId);
-        return {
-            driver_id: detail?.driverId,
-            km: metric._sum.kilometersDriven,
-        }
-    });
-
+    const totalSeconds = totalMetrics._sum.timeInMotionSeconds || 0;
+    const avgSeconds = totalMetrics._avg.timeInMotionSeconds || 0;
+    
     const TRAFFIC_FACTOR = 80;
-    const estimatedImpressions = totalTimeExposedHours * TRAFFIC_FACTOR;
-    const map_url = `https://maps.drivead.com/reports/${campaignId}`;
+    const estimatedImpressions = Math.round((totalSeconds / 3600) * TRAFFIC_FACTOR);
+    const avgTimeHours = avgSeconds / 3600;
+
+    // 3. Performance Diária (Gráfico)
+    // Agrupa por data. Nota: Prisma não agrupa por data facilmente em todos os DBs,
+    // mas como temos o campo `date` limpo no DailyAssignmentMetric, funciona bem.
+    const dailyMetrics = await this.prisma.dailyAssignmentMetric.groupBy({
+      by: ['date'],
+      where: { assignment: { campaignId } },
+      _sum: { timeInMotionSeconds: true },
+      orderBy: { date: 'asc' }
+    });
+
+    const dailyPerformance = dailyMetrics.map(m => {
+      const daySeconds = m._sum.timeInMotionSeconds || 0;
+      const dayImpressions = Math.round((daySeconds / 3600) * TRAFFIC_FACTOR);
+      
+      // Formata data para "DD/MM"
+      const day = m.date.getDate().toString().padStart(2, '0');
+      const month = (m.date.getMonth() + 1).toString().padStart(2, '0');
+
+      return {
+        day_label: `${day}/${month}`,
+        impressions: dayImpressions
+      };
+    });
+
+    // 4. Lista de Top Motoristas
+    // Precisamos buscar os dados agregados por motorista e os dados do motorista (nome/foto)
+    const driverMetrics = await this.prisma.dailyAssignmentMetric.groupBy({
+      by: ['assignmentId'],
+      where: { assignment: { campaignId } },
+      _sum: { kilometersDriven: true, timeInMotionSeconds: true },
+      orderBy: { _sum: { kilometersDriven: 'desc' } }, // Top KMs
+      take: 10 // Top 10
+    });
+
+    const assignments = await this.prisma.assignment.findMany({
+      where: { id: { in: driverMetrics.map(m => m.assignmentId) } },
+      include: {
+        driver: {
+          include: {
+            user: { select: { name: true } }, // Nome do usuário
+            // Aqui você pegaria a foto do perfil se tivesse (ex: kycDocuments selfie)
+            kycDocuments: { where: { docType: 'selfie' }, select: { fileUrl: true }, take: 1 }
+          }
+        }
+      }
+    });
+
+    const driversList = driverMetrics.map(metric => {
+      const assign = assignments.find(a => a.id === metric.assignmentId);
+      const seconds = metric._sum.timeInMotionSeconds || 0;
+      
+      return {
+        driver_id: assign?.driverId,
+        name: assign?.driver?.user?.name || 'Motorista',
+        photo_url: assign?.driver?.kycDocuments?.[0]?.fileUrl || null, // Pega a selfie como avatar
+        km: parseFloat((metric._sum.kilometersDriven || 0).toFixed(1)),
+        hours: parseFloat((seconds / 3600).toFixed(1))
+      };
+    });
+
+    // URL do mapa (Placeholder por enquanto, ou lógica real se tiver)
+    const map_url = null; // O front vai mostrar placeholder se for null
 
     return {
-        map_url,
-        total_km: parseFloat(totalKm.toFixed(2)),
-        total_time_exposed_hours: parseFloat(totalTimeExposedHours.toFixed(2)),
-        estimated_impressions: Math.round(estimatedImpressions),
-        driver_breakdown: driverBreakdown,
+      total_km: parseFloat(totalKm.toFixed(1)),
+      estimated_impressions: estimatedImpressions,
+      avg_time_hours: parseFloat(avgTimeHours.toFixed(1)),
+      map_url: map_url,
+      daily_performance: dailyPerformance,
+      drivers: driversList
     };
   }
 

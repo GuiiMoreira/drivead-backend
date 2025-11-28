@@ -58,4 +58,10 @@ export class AdvertisersController {
   invite(@Req() req, @Body() dto: InviteMemberDto) {
     return this.advertisersService.inviteMember(req.user as User, dto);
   }
+
+  @Get('me/dashboard-summary')
+  @UseGuards(AuthGuard('jwt'))
+  getDashboard(@Req() req) {
+    return this.advertisersService.getDashboardSummary(req.user as User);
+  }
 }

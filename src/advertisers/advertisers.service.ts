@@ -7,8 +7,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateAdvertiserDto } from './dto/update-advertiser.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
-import { Advertiser, User, AdvertiserRole, PermissionLevel } from '@prisma/client';
+import { Advertiser, User, AdvertiserRole, PermissionLevel, CampaignStatus, AssignmentStatus } from '@prisma/client';
 import { CreateAdvertiserDto } from './dto/create-advertiser.dto';
+import { DashboardSummaryDto } from './dto/dashboard-summary.dto';
 
 @Injectable()
 export class AdvertisersService {
@@ -138,5 +139,126 @@ export class AdvertisersService {
         permissionLevel: dto.permissao,
       },
     });
+  }
+async getDashboardSummary(user: User): Promise<DashboardSummaryDto> {
+    if (!user.advertiserId) {
+      throw new BadRequestException('Usuário não vinculado a um anunciante.');
+    }
+
+    const advertiserId = user.advertiserId;
+
+    // 1. Métricas de Campanhas (Ativas, Orçamento, Gasto)
+    const campaigns = await this.prisma.campaign.findMany({
+      where: { advertiserId },
+      include: {
+        _count: {
+          select: {
+            assignments: {
+              where: { status: { in: [AssignmentStatus.active, AssignmentStatus.installed] } }
+            }
+          }
+        }
+      }
+    });
+
+    const active_campaigns_count = campaigns.filter(c => c.status === CampaignStatus.active).length;
+    const total_budget = campaigns.reduce((acc, c) => acc + c.budget, 0);
+
+    // Cálculo estimado do "Total Gasto" (Pro-rata baseado no tempo decorrido da campanha)
+    let total_spent = 0;
+    const now = new Date();
+    for (const c of campaigns) {
+      if (c.status === CampaignStatus.draft || c.status === CampaignStatus.pending_payment || c.status === CampaignStatus.cancelled) continue;
+      
+      const totalDuration = c.endAt.getTime() - c.startAt.getTime();
+      const elapsed = now.getTime() - c.startAt.getTime();
+      
+      // Se a campanha já acabou, gastou tudo. Se ainda não começou, gastou 0.
+      let percentage = 0;
+      if (elapsed >= totalDuration) percentage = 1;
+      else if (elapsed > 0) percentage = elapsed / totalDuration;
+
+      total_spent += c.budget * percentage;
+    }
+
+    // 2. Métricas de Performance (KMs, Impressões) - Baseado nas métricas diárias
+    // Buscamos métricas de todas as assignments ligadas às campanhas deste anunciante
+    const metrics = await this.prisma.dailyAssignmentMetric.aggregate({
+      where: {
+        assignment: {
+          campaign: { advertiserId }
+        }
+      },
+      _sum: {
+        kilometersDriven: true,
+        timeInMotionSeconds: true
+      }
+    });
+
+    const total_km_driven = metrics._sum.kilometersDriven || 0;
+    const totalSeconds = metrics._sum.timeInMotionSeconds || 0;
+    // Estimativa de impressões: Horas * Fator de Tráfego (ex: 80)
+    const estimated_reach = Math.round((totalSeconds / 3600) * 80);
+
+    // 3. Métricas de Carros
+    // Carros contratados = soma de assignments ativos/instalados em todas as campanhas
+    const cars_total_hired = campaigns.reduce((acc, c) => acc + c._count.assignments, 0);
+
+    // Carros ativos agora: Motoristas que enviaram ping nos últimos 30 minutos
+    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    const carsActiveNowCount = await this.prisma.position.groupBy({
+      by: ['driverId'],
+      where: {
+        assignment: { campaign: { advertiserId } },
+        ts: { gte: thirtyMinutesAgo }
+      },
+    });
+    const cars_active_now = carsActiveNowCount.length;
+
+    // 4. Performance Semanal (Últimos 7 dias)
+    const weeklyData = [];
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const nextDate = new Date(date);
+      nextDate.setDate(date.getDate() + 1);
+
+      // Soma métricas do dia específico
+      const dayMetrics = await this.prisma.dailyAssignmentMetric.aggregate({
+        where: {
+          assignment: { campaign: { advertiserId } },
+          date: { gte: date, lt: nextDate }
+        },
+        _sum: { timeInMotionSeconds: true }
+      });
+
+      const daySeconds = dayMetrics._sum.timeInMotionSeconds || 0;
+      const dayImpressions = Math.round((daySeconds / 3600) * 80);
+
+      weeklyData.push({
+        day_label: days[date.getDay()], // Pega o nome do dia (ex: "Seg")
+        impressions: dayImpressions,
+        intensity: 0 // Será calculado no front ou aqui se quisermos normalizar
+      });
+    }
+
+    // Calcular intensidade relativa (0.0 a 1.0)
+    const maxImpressions = Math.max(...weeklyData.map(d => d.impressions)) || 1;
+    weeklyData.forEach(d => d.intensity = parseFloat((d.impressions / maxImpressions).toFixed(2)));
+
+    return {
+      active_campaigns_count,
+      total_spent: parseFloat(total_spent.toFixed(2)),
+      total_budget: parseFloat(total_budget.toFixed(2)),
+      estimated_reach,
+      total_km_driven: parseFloat(total_km_driven.toFixed(2)),
+      cars_active_now,
+      cars_total_hired,
+      weekly_performance: weeklyData
+    };
   }
 }
