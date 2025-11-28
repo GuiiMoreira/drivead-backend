@@ -405,11 +405,12 @@ enum CampaignStatus {
 }
 
 enum AssignmentStatus {
-  assigned
-  accepted
-  awaiting_approval
-  installed
-  active
+  assigned            // Sistema/Admin sugeriu a campanha
+  accepted            // Motorista aceitou participar (mas não agendou)
+  scheduled           // <--- NOVO: Agendamento confirmado com instalador
+  awaiting_approval   // Fotos enviadas, aguarda admin
+  installed           // Aprovado e adesivado
+  active              // Rodando (após installedAt)
   removed
   fraud
   finished

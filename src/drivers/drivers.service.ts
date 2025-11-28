@@ -148,16 +148,17 @@ export class DriversService {
       throw new ForbiddenException('O seu perfil de motorista não está aprovado para participar em campanhas.');
     }
 
-    const activeAssignment = await this.prisma.assignment.findFirst({
+const activeAssignment = await this.prisma.assignment.findFirst({
       where: {
         driverId: driver.id,
         status: {
           in: [
             AssignmentStatus.assigned,
             AssignmentStatus.accepted,
+            AssignmentStatus.scheduled,
+            AssignmentStatus.awaiting_approval,
             AssignmentStatus.installed,
-            AssignmentStatus.active,
-            AssignmentStatus.awaiting_approval
+            AssignmentStatus.active
           ]
         }
       }
@@ -201,7 +202,7 @@ export class DriversService {
         driverId: driver.id,
         campaignId: campaignId,
         vehicleId: vehicle.id,
-        status: AssignmentStatus.assigned,
+        status: AssignmentStatus.accepted,
         payoutAmount: parseFloat(driverPayoutAmount.toFixed(2)),
       },
     });
@@ -215,8 +216,9 @@ export class DriversService {
           in: [
             AssignmentStatus.assigned,
             AssignmentStatus.accepted,
-            AssignmentStatus.installed,
+            AssignmentStatus.scheduled, // <--- ADICIONADO
             AssignmentStatus.awaiting_approval,
+            AssignmentStatus.installed,
             AssignmentStatus.active
           ]
         },
@@ -246,7 +248,7 @@ export class DriversService {
       data: {
         installerId: scheduleDto.installerId,
         scheduledInstallAt: new Date(scheduleDto.scheduledAt),
-        status: AssignmentStatus.accepted,
+        status: AssignmentStatus.scheduled,
       },
     });
   }
@@ -259,7 +261,7 @@ export class DriversService {
     const assignment = await this.prisma.assignment.findFirst({
       where: {
         driver: { userId: user.id },
-        status: AssignmentStatus.accepted,
+        status: AssignmentStatus.scheduled,
       }
     });
 
