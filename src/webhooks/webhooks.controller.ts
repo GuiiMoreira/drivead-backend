@@ -38,19 +38,19 @@ export class WebhooksController {
                     throw new NotFoundException('ID da campanha (external_reference) não encontrado no pagamento.');
                 }
 
-                if (paymentStatus === 'approved') {
-                    // Pagamento Aprovado! Atualiza a campanha para 'active'.
-                    await this.prisma.campaign.updateMany({
-                        where: {
-                            id: campaignId,
-                            status: CampaignStatus.draft, // Só atualiza se ainda for um rascunho
-                        },
-                        data: {
-                            status: CampaignStatus.active,
-                        },
-                    });
-                    this.logger.log(`Campanha ${campaignId} ativada com sucesso.`);
-                } else {
+ if (paymentStatus === 'approved') {
+  // ATUALIZAÇÃO: Muda para 'pending_approval' em vez de 'active'
+  await this.prisma.campaign.updateMany({
+    where: {
+      id: campaignId,
+      status: CampaignStatus.draft,
+    },
+    data: {
+      status: CampaignStatus.pending_approval, // <--- MUDANÇA AQUI
+    },
+  });
+  this.logger.log(`Campanha ${campaignId} paga. Aguardando aprovação do admin.`);
+} else {
                     this.logger.log(`Status do pagamento ${paymentId} é: ${paymentStatus}`);
                 }
 

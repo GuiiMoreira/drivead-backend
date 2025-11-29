@@ -9,10 +9,34 @@ class ReviewProofDto {
     notes?: string;
 }
 
+class ReviewCampaignDto {
+  action: 'approve' | 'reject';
+  reason?: string;
+}
+
+class ResolveFraudDto {
+  action: 'dismiss' | 'penalize';
+  notes?: string;
+}
+
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 @Controller('admin')
 export class AdminController {
     constructor(private readonly adminService: AdminService) { }
+
+    // --- DASHBOARD & MONITORAMENTO (NOVOS) ---
+
+  @Get('stats')
+  async getDashboardStats() {
+    const stats = await this.adminService.getDashboardStats();
+    return { success: true, data: stats };
+  }
+
+  @Get('monitoring/active-drivers')
+  async getActiveDriversLocations() {
+    const locations = await this.adminService.getActiveDriversLocations();
+    return { success: true, data: locations };
+  }
 
     // --- Motoristas ---
     @Get('drivers/pending')
@@ -85,4 +109,39 @@ export class AdminController {
             data: proof,
         };
     }
+// --- CAMPANHAS ---
+  @Get('campaigns/pending')
+  async getPendingCampaigns() {
+    const campaigns = await this.adminService.listPendingCampaigns();
+    return { success: true, data: campaigns };
+  }
+
+  @Post('campaigns/:id/review')
+  async reviewCampaign(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReviewCampaignDto
+  ) {
+    const result = await this.adminService.reviewCampaign(id, body.action, body.reason);
+    return { 
+      success: true, 
+      message: `Campanha ${body.action === 'approve' ? 'aprovada' : 'rejeitada'}.`,
+      data: result 
+    };
+  }
+
+  // --- ANTI-FRAUDE ---
+  @Get('fraud-alerts')
+  async getFraudAlerts() {
+    const alerts = await this.adminService.listFraudAlerts();
+    return { success: true, data: alerts };
+  }
+
+  @Post('fraud-alerts/:id/resolve')
+  async resolveFraudAlert(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ResolveFraudDto
+  ) {
+    const result = await this.adminService.resolveFraudAlert(id, body.action, body.notes);
+    return { success: true, ...result };
+  }
 }
