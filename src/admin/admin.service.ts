@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
-import { KycStatus, TransactionStatus, AssignmentStatus, ProofRequestStatus, CampaignStatus, Role } from '@prisma/client';
+import { KycStatus, TransactionStatus, AssignmentStatus, ProofRequestStatus, CampaignStatus, Role, DocValidationStatus } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -516,6 +516,70 @@ export class AdminService {
         phone: dto.phone,
         name: dto.name,
         role: Role.admin,
+      },
+    });
+  }
+
+  // =================================================================
+  // GESTÃO DE ANUNCIANTES (EMPRESAS)
+  // =================================================================
+
+  /**
+   * Lista todas as empresas anunciantes.
+   * Pode filtrar por status (ex: apenas PENDENTE).
+   */
+  async listAdvertisers(status?: DocValidationStatus) {
+    const where = status ? { validationStatus: status } : {};
+
+    return this.prisma.advertiser.findMany({
+      where,
+      include: {
+        // Trazemos os usuários para o admin saber quem é o responsável
+        users: {
+          select: { id: true, name: true, phone: true, teamRole: true, email: true },
+        },
+        // Contagem de campanhas para contexto
+        _count: {
+          select: { campaigns: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Busca detalhes de uma empresa específica.
+   */
+  async getAdvertiserDetails(advertiserId: string) {
+    const advertiser = await this.prisma.advertiser.findUnique({
+      where: { id: advertiserId },
+      include: {
+        users: true,
+        campaigns: true,
+      }
+    });
+
+    if (!advertiser) {
+      throw new NotFoundException('Empresa não encontrada.');
+    }
+
+    return advertiser;
+  }
+
+  /**
+   * Aprova ou Rejeita o cadastro da empresa (Validação de Documentos).
+   */
+  async reviewAdvertiser(advertiserId: string, action: 'approve' | 'reject', reason?: string) {
+    const advertiser = await this.prisma.advertiser.findUnique({ where: { id: advertiserId } });
+    if (!advertiser) throw new NotFoundException('Empresa não encontrada.');
+
+    const newStatus = action === 'approve' ? DocValidationStatus.APROVADO : DocValidationStatus.REPROVADO;
+
+    return this.prisma.advertiser.update({
+      where: { id: advertiserId },
+      data: {
+        validationStatus: newStatus,
+        rejectionReason: action === 'reject' ? reason : null,
       },
     });
   }

@@ -1,13 +1,19 @@
-import { Controller, Get, Post, Body, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, ParseUUIDPipe, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { DocValidationStatus } from '@prisma/client';
 
 // DTO simples para a revisão, pode criar um ficheiro separado se preferir
 class ReviewProofDto {
     approved: boolean;
     notes?: string;
+}
+
+class ReviewAdvertiserDto {
+  action: 'approve' | 'reject';
+  reason?: string;
 }
 
 class ReviewCampaignDto {
@@ -174,6 +180,33 @@ export class AdminController {
       success: true,
       message: 'Novo administrador criado com sucesso.',
       data: newAdmin,
+    };
+  }
+// --- GESTÃO DE ANUNCIANTES ---
+
+  @Get('advertisers')
+  async getAdvertisers(@Query('status') status?: DocValidationStatus) {
+    // Permite filtrar na URL: /admin/advertisers?status=PENDENTE
+    const advertisers = await this.adminService.listAdvertisers(status);
+    return { success: true, data: advertisers };
+  }
+
+  @Get('advertisers/:id')
+  async getAdvertiserDetails(@Param('id', ParseUUIDPipe) id: string) {
+    const advertiser = await this.adminService.getAdvertiserDetails(id);
+    return { success: true, data: advertiser };
+  }
+
+  @Post('advertisers/:id/review')
+  async reviewAdvertiser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReviewAdvertiserDto
+  ) {
+    const result = await this.adminService.reviewAdvertiser(id, body.action, body.reason);
+    return {
+      success: true,
+      message: `Empresa ${body.action === 'approve' ? 'aprovada' : 'rejeitada'}.`,
+      data: result,
     };
   }
 }
