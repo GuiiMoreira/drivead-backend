@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, UseGuards, ParseUUIDPipe } from '@n
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
+import { CreateAdminDto } from './dto/create-admin.dto';
 
 // DTO simples para a revisão, pode criar um ficheiro separado se preferir
 class ReviewProofDto {
@@ -143,5 +144,36 @@ export class AdminController {
   ) {
     const result = await this.adminService.resolveFraudAlert(id, body.action, body.notes);
     return { success: true, ...result };
+  }
+// --- VISÃO GERAL ---
+
+  @Get('drivers')
+  async getAllDrivers() {
+    const drivers = await this.adminService.listAllDrivers();
+    return { success: true, data: drivers };
+  }
+
+  @Get('campaigns')
+  async getAllCampaigns() {
+    const campaigns = await this.adminService.listAllCampaigns();
+    return { success: true, data: campaigns };
+  }
+
+  // --- GESTÃO DE ADMINS ---
+
+  @Get('users/admins')
+  async getAdmins() {
+    const admins = await this.adminService.listAdmins();
+    return { success: true, data: admins };
+  }
+
+  @Post('users/admins')
+  async createAdmin(@Body() dto: CreateAdminDto) {
+    const newAdmin = await this.adminService.createAdmin(dto);
+    return {
+      success: true,
+      message: 'Novo administrador criado com sucesso.',
+      data: newAdmin,
+    };
   }
 }

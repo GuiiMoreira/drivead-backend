@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { KycStatus, TransactionStatus, AssignmentStatus, ProofRequestStatus, CampaignStatus } from '@prisma/client';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { KycStatus, TransactionStatus, AssignmentStatus, ProofRequestStatus, CampaignStatus, Role } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -113,6 +114,8 @@ export class AdminService {
       }
     });
   }
+
+
 
     /**
      * Lista todos os motoristas cujo status de KYC é 'pending'.
@@ -423,5 +426,97 @@ export class AdminService {
     }
 
     return results;
+  }
+// =================================================================
+  // VISÃO GLOBAL (LISTAS COMPLETAS)
+  // =================================================================
+
+  /**
+   * Lista TODOS os motoristas (aprovados, pendentes, rejeitados).
+   * Útil para a tabela geral de motoristas no painel.
+   */
+  async listAllDrivers() {
+    return this.prisma.driver.findMany({
+      include: {
+        user: {
+          select: { name: true, phone: true, email: true, createdAt: true, isActive: true },
+        },
+        vehicles: true, // Mostra os carros
+        wallet: { select: { balance: true } }, // Mostra o saldo atual
+        _count: {
+          select: { assignments: true } // Quantas campanhas já participou
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Lista TODAS as campanhas do sistema.
+   */
+  async listAllCampaigns() {
+    return this.prisma.campaign.findMany({
+      include: {
+        advertiser: {
+          include: {
+            users: { select: { name: true, phone: true }, take: 1 } // Contato do anunciante
+          }
+        },
+        _count: {
+          select: { assignments: true } // Quantos carros estão nesta campanha
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // =================================================================
+  // GESTÃO DE ADMINISTRADORES
+  // =================================================================
+
+  /**
+   * Lista todos os usuários com permissão de ADMIN no sistema.
+   */
+  async listAdmins() {
+    return this.prisma.user.findMany({
+      where: { role: Role.admin },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        createdAt: true,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  /**
+   * Cria um novo Administrador.
+   * O usuário poderá fazer login com este número e terá acesso total.
+   */
+  async createAdmin(dto: CreateAdminDto) {
+    // Verifica se já existe um usuário com este telefone
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+
+    if (existingUser) {
+      // Se já existe, apenas promove para admin (cuidado com esta lógica em produção)
+      return this.prisma.user.update({
+        where: { id: existingUser.id },
+        data: { role: Role.admin, name: dto.name },
+      });
+    }
+
+    // Cria o novo usuário admin
+    return this.prisma.user.create({
+      data: {
+        phone: dto.phone,
+        name: dto.name,
+        role: Role.admin,
+      },
+    });
   }
 }
