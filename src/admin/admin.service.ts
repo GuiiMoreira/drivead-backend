@@ -452,6 +452,43 @@ export class AdminService {
   }
 
   /**
+   * Busca a ficha completa de um motorista (independente do status).
+   * Inclui: Dados pessoais, Veículos, Documentos (KYC), Histórico de Campanhas e Carteira.
+   */
+  async getDriverDetails(driverId: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id: driverId },
+      include: {
+        // 1. Dados Pessoais
+        user: {
+          select: { name: true, phone: true, email: true, createdAt: true, isActive: true },
+        },
+        // 2. Veículos cadastrados
+        vehicles: true,
+        // 3. Documentos (CNH, CRLV, etc.) - O que você pediu!
+        kycDocuments: true,
+        // 4. Saldo atual
+        wallet: {
+          select: { balance: true }
+        },
+        // 5. Histórico de Campanhas (Assignments)
+        assignments: {
+          include: {
+            campaign: { select: { title: true, status: true, advertiser: { select: { nomeFantasia: true } } } }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      },
+    });
+
+    if (!driver) {
+      throw new NotFoundException('Motorista não encontrado.');
+    }
+
+    return driver;
+  }
+
+  /**
    * Lista TODAS as campanhas do sistema.
    */
   async listAllCampaigns() {

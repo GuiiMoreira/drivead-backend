@@ -159,6 +159,12 @@ export class AdminController {
     return { success: true, data: drivers };
   }
 
+  @Get('drivers/:id')
+  async getDriverDetails(@Param('id', ParseUUIDPipe) id: string) {
+    const driver = await this.adminService.getDriverDetails(id);
+    return { success: true, data: driver };
+  }
+
   @Get('campaigns')
   async getAllCampaigns() {
     const campaigns = await this.adminService.listAllCampaigns();
