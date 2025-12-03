@@ -43,11 +43,6 @@ export class CampaignsService {
 
     const finalBudget = priceData.totalPrice;
 
-    // Definição das datas
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(startDate.getDate() + createCampaignDto.durationDays);
-
     // Criação da campanha
     const campaign = await this.prisma.campaign.create({
       data: {
@@ -55,8 +50,11 @@ export class CampaignsService {
         title: createCampaignDto.title,
         type: createCampaignDto.type,
         areaGeojson: createCampaignDto.area_geojson as any,
-        startAt: startDate,
-        endAt: endDate,
+        startAt: new Date(),
+        // Se quiser suportar validade global no futuro, adicione ao DTO. Por enquanto, null ou calculado.
+        // Para o MVP, vamos deixar null para seguir a sua lógica de "sem validade fixa".
+        endAt: null, 
+        durationDays: createCampaignDto.durationDays,
         budget: finalBudget,
         numCars: createCampaignDto.numCars,
         requirements: {

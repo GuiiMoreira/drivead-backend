@@ -128,8 +128,9 @@ model Campaign {
   title        String
   type         CampaignType
   areaGeojson  Json?
-  startAt      DateTime
-  endAt        DateTime
+  startAt      DateTime   @default(now())
+  endAt        DateTime? 
+  durationDays Int
   budget       Float
   numCars      Int            @default(1)
   creativeUrl  String?
@@ -453,6 +454,7 @@ enum TransactionStatus {
 enum ProofRequestStatus {
   NONE
   PENDING_RANDOM
+  PENDING_FINAL
 }
 
 enum ApprovalStatus {
