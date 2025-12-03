@@ -130,7 +130,7 @@ model Campaign {
   areaGeojson  Json?
   startAt      DateTime   @default(now())
   endAt        DateTime? 
-  durationDays Int
+  durationDays Int @default(0)
   budget       Float
   numCars      Int            @default(1)
   creativeUrl  String?
