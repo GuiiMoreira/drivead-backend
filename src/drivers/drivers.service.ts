@@ -407,4 +407,22 @@ const activeAssignment = await this.prisma.assignment.findFirst({
 
     return driver.vehicles;
   }
+
+  async quitCampaign(user: User, reason: string) {
+    const assignment = await this.getCurrentAssignment(user);
+    
+    if (!assignment) {
+      throw new NotFoundException('Você não possui nenhuma campanha ativa para sair.');
+    }
+
+    // Atualiza o status para indicar que a remoção foi solicitada
+    return this.prisma.assignment.update({
+      where: { id: assignment.id },
+      data: {
+        status: AssignmentStatus.removal_requested, // Certifique-se que este status existe no seu Enum
+        // Se quiser salvar o motivo, pode adicionar um campo 'notes' ou 'metadata' na Assignment
+        // ou criar um registro de AuditLog
+      }
+    });
+  }
 }

@@ -108,5 +108,16 @@ export class CampaignsController {
         };
     }
 
-
+@Post(':id/stop')
+  @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+  async stopCampaign(@Req() req, @Param('id', ParseUUIDPipe) id: string) {
+    const user = req.user as User;
+    const result = await this.campaignsService.stopCampaignManual(user, id);
+    
+    return {
+      success: true,
+      message: result.message,
+      data: result
+    };
+  }
 }

@@ -417,6 +417,7 @@ enum AssignmentStatus {
   removed
   fraud
   finished
+  removal_requested
   rejected
 }
 

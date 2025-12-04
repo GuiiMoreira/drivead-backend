@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
-import { User, CampaignStatus } from '@prisma/client';
+import { User, CampaignStatus, AssignmentStatus, ProofRequestStatus } from '@prisma/client';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
 import { StorageService } from '../storage/storage.service';
 
@@ -283,6 +283,59 @@ async generateCampaignReport(user: User, campaignId: string) {
             quantityFactor: quantityFactors(dto.numCars),
         },
         estimatedImpressions: 450000,
+    };
+  }
+
+  /**
+   * Encerra manualmente uma campanha antes do prazo.
+   * - Muda status da campanha para 'finished'.
+   * - Solicita prova final a todos os motoristas ativos.
+   */
+  async stopCampaignManual(user: User, campaignId: string) {
+    // 1. Validações de Permissão
+    if (!user.advertiserId) {
+        throw new ForbiddenException('Usuário não vinculado a uma empresa.');
+    }
+
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId }
+    });
+
+    if (!campaign) {
+        throw new NotFoundException('Campanha não encontrada.');
+    }
+
+    if (campaign.advertiserId !== user.advertiserId) {
+        throw new ForbiddenException('Você não tem permissão para modificar esta campanha.');
+    }
+
+    if (campaign.status !== CampaignStatus.active) {
+        throw new BadRequestException(`A campanha não está ativa (Status atual: ${campaign.status}).`);
+    }
+
+    // 2. Encerra a campanha
+    await this.prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: CampaignStatus.finished }
+    });
+
+    // 3. Notifica motoristas (marca para prova final)
+    // Atualiza apenas os motoristas que estão ativos
+    const updateResult = await this.prisma.assignment.updateMany({
+        where: { 
+            campaignId: campaignId, 
+            status: AssignmentStatus.active 
+        },
+        data: { 
+            proofStatus: ProofRequestStatus.PENDING_FINAL 
+            // Opcional: Se quiser "travar" a contagem de KMs imediatamente,
+            // pode mudar o status para algo como 'finishing' ou manter 'active' até a prova.
+        }
+    });
+
+    return { 
+        message: 'Campanha encerrada com sucesso.', 
+        affectedDrivers: updateResult.count 
     };
   }
 }

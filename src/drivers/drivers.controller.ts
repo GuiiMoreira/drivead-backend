@@ -1,6 +1,6 @@
 import {
     Controller, Post, Body, UseGuards, Req, Get, Param, ParseUUIDPipe,
-    UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator
+    UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SubmitProofDto } from './dto/submit-proof.dto';
@@ -188,6 +188,24 @@ export class DriversController {
     return {
       success: true,
       data: vehicles,
+    };
+  }
+/**
+   * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
+   */
+  @Post('me/assignment/quit')
+  @UseGuards(AuthGuard('jwt'), DriverGuard)
+  async quitCampaign(@Req() req, @Body() body: { reason: string }) {
+    if (!body.reason) {
+        throw new BadRequestException('O motivo da saída é obrigatório.');
+    }
+
+    const result = await this.driversService.quitCampaign(req.user as User, body.reason);
+    
+    return {
+      success: true,
+      message: 'Solicitação de saída recebida. Por favor, siga as instruções para remoção do adesivo.',
+      data: result
     };
   }
 }
