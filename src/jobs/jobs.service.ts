@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CampaignStatus, ProofRequestStatus, AssignmentStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class JobsService {
@@ -12,6 +13,7 @@ export class JobsService {
         @InjectQueue('metrics-queue') private metricsQueue: Queue,
         @InjectQueue('antifraud-queue') private antifraudQueue: Queue,
         private prisma: PrismaService,
+        private notificationsService: NotificationsService,
     ) { }
 
     // Este método roda automaticamente todos os dias às 3 da manhã
