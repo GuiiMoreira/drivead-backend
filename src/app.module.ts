@@ -15,6 +15,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { UsersModule } from './users/users.module';
 import { AdvertisersModule } from './advertisers/advertisers.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AdvertisersModule } from './advertisers/advertisers.module';
     WebhooksModule,
     UsersModule,
     AdvertisersModule,
+    NotificationsModule,
   ],
   controllers: [],
   providers: [],

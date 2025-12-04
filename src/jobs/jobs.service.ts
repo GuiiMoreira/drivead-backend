@@ -152,4 +152,57 @@ export class JobsService {
       }
     }
   }
+
+   /**
+   * Sorteia motoristas ativos para enviarem uma foto aleatória.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_10AM)
+  async scheduleRandomProofRequests() {
+    this.logger.log('Iniciando sorteio de prova aleatória...');
+
+    // 1. Busca todas as atribuições elegíveis
+    // Precisamos incluir o 'driver' e 'user' para ter o ID do usuário para notificar
+    const eligibleAssignments = await this.prisma.assignment.findMany({
+      where: {
+        status: { in: [AssignmentStatus.installed, AssignmentStatus.active] },
+        proofStatus: ProofRequestStatus.NONE,
+      },
+      include: {
+        driver: {
+          include: { user: true }
+        }
+      }
+    });
+
+    const PROBABILITY = 0.1; // 10% chance
+    let count = 0;
+
+    for (const assignment of eligibleAssignments) {
+      if (Math.random() < PROBABILITY) {
+        // A. Marca no banco
+        await this.prisma.assignment.update({
+          where: { id: assignment.id },
+          data: { proofStatus: ProofRequestStatus.PENDING_RANDOM },
+        });
+        
+        // B. Envia Notificação Push + In-App
+        const userId = assignment.driver.userId;
+        await this.notificationsService.sendNotification(
+          userId,
+          '📸 Verificação Necessária',
+          'Você foi sorteado! Envie uma foto do veículo hoje para continuar na campanha.',
+          { 
+            type: 'PROOF_REQUEST', 
+            assignmentId: assignment.id,
+            proofType: 'RANDOM'
+          }
+        );
+
+        this.logger.log(`📸 Solicitação enviada para motorista ${userId}`);
+        count++;
+      }
+    }
+
+    this.logger.log(`Sorteio finalizado. ${count} motoristas notificados.`);
+  }
 }
