@@ -208,4 +208,14 @@ export class DriversController {
       data: result
     };
   }
+  
+  @Get('me/history')
+  @UseGuards(AuthGuard('jwt'), DriverGuard)
+  async getCampaignHistory(@Req() req) {
+    const history = await this.driversService.getCampaignHistory(req.user as User);
+    return {
+      success: true,
+      data: history,
+    };
+  }
 }

@@ -425,4 +425,27 @@ const activeAssignment = await this.prisma.assignment.findFirst({
       }
     });
   }
+ /**
+   * Obtém o histórico de campanhas passadas do motorista (finalizadas ou removidas).
+   */
+  async getCampaignHistory(user: User) {
+    const history = await this.prisma.assignment.findMany({
+      where: {
+        driver: { userId: user.id },
+        status: {
+          in: [AssignmentStatus.finished, AssignmentStatus.removed]
+        }
+      },
+      include: {
+        campaign: true, // Inclui detalhes da campanha para mostrar título, datas, etc.
+        // Opcional: incluir métricas finais se quiser mostrar resumo de KM rodado
+        // dailyMetrics: { select: { kilometersDriven: true } } 
+      },
+      orderBy: {
+        updatedAt: 'desc' // As mais recentes primeiro
+      }
+    });
+
+    return history;
+  }
 }
