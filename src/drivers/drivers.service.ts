@@ -448,4 +448,46 @@ const activeAssignment = await this.prisma.assignment.findFirst({
 
     return history;
   }
+
+  async saveVehiclePhotos(user: User, files: { front?: Express.Multer.File[], side?: Express.Multer.File[], rear?: Express.Multer.File[] }) {
+    // 1. Encontra o veículo principal do motorista
+    // (Assumimos o primeiro veículo ou o mais recente. No futuro pode ser por ID do veículo)
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+      include: {
+        vehicles: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!driver || driver.vehicles.length === 0) {
+      throw new NotFoundException('Nenhum veículo encontrado para este motorista.');
+    }
+
+    const vehicle = driver.vehicles[0];
+
+    // 2. Faz o upload das 3 imagens em paralelo
+    const [frontUrl, sideUrl, rearUrl] = await Promise.all([
+      files.front ? this.storageService.uploadFile(files.front[0], `vehicles/${vehicle.id}/front`) : Promise.resolve(null),
+      files.side ? this.storageService.uploadFile(files.side[0], `vehicles/${vehicle.id}/side`) : Promise.resolve(null),
+      files.rear ? this.storageService.uploadFile(files.rear[0], `vehicles/${vehicle.id}/rear`) : Promise.resolve(null),
+    ]);
+
+    // 3. Atualiza o registo do veículo com as URLs no campo JSON 'photos'
+    const updatedVehicle = await this.prisma.vehicle.update({
+      where: { id: vehicle.id },
+      data: {
+        photos: {
+          front: frontUrl,
+          side: sideUrl,
+          rear: rearUrl,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    });
+
+    return updatedVehicle;
+  }
 }

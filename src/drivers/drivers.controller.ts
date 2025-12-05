@@ -218,4 +218,32 @@ export class DriversController {
       data: history,
     };
   }
+
+   @Post('vehicle-photos')
+  @UseGuards(AuthGuard('jwt'), DriverGuard)
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'front', maxCount: 1 },
+    { name: 'side', maxCount: 1 },
+    { name: 'rear', maxCount: 1 },
+  ]))
+  async uploadVehiclePhotos(
+    @Req() req,
+    @UploadedFiles() files: { 
+      front?: Express.Multer.File[], 
+      side?: Express.Multer.File[], 
+      rear?: Express.Multer.File[] 
+    },
+  ) {
+    if (!files.front || !files.side || !files.rear) {
+      throw new BadRequestException('É necessário enviar as 3 fotos do veículo (frente, lateral e traseira).');
+    }
+
+    const result = await this.driversService.saveVehiclePhotos(req.user as User, files);
+    
+    return { 
+      success: true, 
+      message: 'Fotos do veículo enviadas com sucesso.',
+      data: result
+    };
+  }
 }
