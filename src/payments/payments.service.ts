@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException, Logger, NotFoundException, Fo
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CampaignStatus, User } from '@prisma/client';
-import { MercadoPagoConfig, Preference } from 'mercadopago'; // Usamos Preference para Checkout Pro
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 @Injectable()
 export class PaymentsService {
@@ -31,21 +31,17 @@ export class PaymentsService {
         this.logger.log(`Webhook URL configurada: ${this.webhookUrl}`);
       }
     } else {
-      this.logger.warn('BACKEND_URL não configurada. Webhooks não funcionarão (status não atualizará sozinho).');
+      this.logger.warn('BACKEND_URL não configurada. Webhooks não funcionarão.');
     }
 
-    // 2. Configuração do Retorno ao Frontend
-    // Tenta pegar FRONTEND_URL, senão usa um fallback genérico ou localhost
-    this.frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-    this.logger.log(`Frontend URL para retorno: ${this.frontendUrl}`);
+    // 2. Configuração do Retorno (Deep Link do App)
+    // O valor deve ser 'drivead://app' conforme solicitado pelo mobile
+    this.frontendUrl = this.configService.get('FRONTEND_URL') || 'drivead://app';
+    this.logger.log(`Deep Link Base configurado: ${this.frontendUrl}`);
 
     this.client = new MercadoPagoConfig({ accessToken: this.accessToken });
   }
 
-  /**
-   * Cria uma PREFERÊNCIA de pagamento (Checkout Pro)
-   * Retorna a URL para onde o usuário deve ser redirecionado.
-   */
   async createPaymentOrder(campaignId: string, user: User) {
     // 1. Buscas e Validações
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -59,7 +55,7 @@ export class PaymentsService {
     const preference = new Preference(this.client);
     const payerEmail = (user.email && user.email.includes('@')) ? user.email : 'financeiro@drivead.com';
 
-    this.logger.log(`Criando Link de Pagamento. Campanha: ${campaignId}, Valor: ${campaign.budget}`);
+    this.logger.log(`Criando Link. Campanha: ${campaignId}, Valor: ${campaign.budget}, Retorno: ${this.frontendUrl}/advertiser/payment`);
 
     try {
       const result = await preference.create({
@@ -77,37 +73,36 @@ export class PaymentsService {
             email: payerEmail,
             name: user.name || 'Anunciante',
           },
-          external_reference: campaignId, // ID da campanha para conciliação no Webhook
+          external_reference: campaignId,
           notification_url: this.webhookUrl,
           
           payment_methods: {
-             excluded_payment_types: [], // Aceita tudo (PIX, Cartão, Boleto, Saldo)
-             installments: 1 // Opcional: define max de parcelas
+             excluded_payment_types: [],
+             installments: 1
           },
           
-          // URLs para onde o usuário volta após o pagamento no site do Mercado Pago
+          // URLs de Retorno (Deep Linking para o App Mobile)
+          // Configurado conforme solicitação: drivead://app/advertiser/payment?status=...
           back_urls: {
-            success: `${this.frontendUrl}/campaigns/${campaignId}?status=success`, 
-            failure: `${this.frontendUrl}/campaigns/${campaignId}?status=failure`,
-            pending: `${this.frontendUrl}/campaigns/${campaignId}?status=pending`
+            success: `${this.frontendUrl}/advertiser/payment?status=success`, 
+            failure: `${this.frontendUrl}/advertiser/payment?status=failure`,
+            pending: `${this.frontendUrl}/advertiser/payment?status=pending`
           },
-          auto_return: 'approved', // Redireciona automaticamente se aprovado
+          auto_return: 'approved',
         }
       });
 
-      // Lógica de Retorno Inteligente:
-      // Se estivermos usando token de TESTE, preferimos o link de Sandbox.
-      // Se for produção, usamos o init_point padrão.
+      // Lógica de Retorno Inteligente (Sandbox vs Produção)
       const redirectUrl = this.accessToken.startsWith('TEST-') 
         ? result.sandbox_init_point 
         : result.init_point;
 
-      this.logger.log(`Link gerado com sucesso: ${redirectUrl}`);
+      this.logger.log(`Link gerado: ${redirectUrl}`);
 
       return redirectUrl; 
       
     } catch (error) {
-      this.logger.error(`Erro ao criar preferência MP: ${error.message}`);
+      this.logger.error(`Erro MP: ${error.message}`);
       if (error.response) {
          this.logger.error(JSON.stringify(error.response.data));
       }
