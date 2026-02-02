@@ -16,6 +16,10 @@ export class PaymentsService {
   ) {
     const accessToken = this.configService.getOrThrow('MERCADO_PAGO_ACCESS_TOKEN');
     
+    // DEBUG CRÍTICO: Mostra o prefixo do token para confirmar se é TEST ou APP_USR
+    // Isso ajuda a verificar se o Railway atualizou a variável de ambiente corretamente
+    this.logger.log(`Inicializando Mercado Pago. Token carregado inicia com: ${accessToken.substring(0, 8)}...`);
+
     // Pega a URL base do backend (ex: https://drivead-backend.up.railway.app)
     // REMOVIDO fallback para localhost pois causa erro de validação "must be url valid" no Mercado Pago
     const rawBackendUrl = this.configService.get('BACKEND_URL') || this.configService.get('API_URL');
