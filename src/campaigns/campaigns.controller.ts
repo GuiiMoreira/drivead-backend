@@ -16,11 +16,11 @@ export class CampaignsController {
         private prisma: PrismaService,
         private readonly paymentsService: PaymentsService,) { }
 
-   @Post()
+    @Post()
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
     @UseInterceptors(FileInterceptor('file')) // <-- Intercepta o campo 'file'
     async createCampaign(
-        @Req() req, 
+        @Req() req,
         @Body() body: { data: string }, // Recebe o JSON como string no campo 'data'
         @UploadedFile() file: Express.Multer.File // Recebe o arquivo
     ) {
@@ -36,7 +36,7 @@ export class CampaignsController {
         }
 
         const user = req.user as User;
-        
+
         const { campaign, priceData } = await this.campaignsService.createCampaign(user, createCampaignDto, file);
 
         return {
@@ -57,16 +57,17 @@ export class CampaignsController {
         @Body() payCampaignDto: PayCampaignDto, // DTO de pagamento
     ) {
         const user = req.user as User;
-        // Removemos a lógica de simulação e chamamos o serviço real
-        const paymentData = await this.paymentsService.createPaymentOrder(id, user);
+        
+        // CORREÇÃO: O serviço agora retorna uma STRING (URL de redirecionamento)
+        // por causa da mudança para Checkout Pro
+        const redirectUrl = await this.paymentsService.createPaymentOrder(id, user);
 
         return {
             success: true,
-            message: 'Ordem de pagamento PIX criada com sucesso.',
+            message: 'Link de pagamento gerado com sucesso.',
             data: {
-                // Envia o PIX Copia e Cola e o QR Code (em base64) para o frontend
-                pixCopiaECola: paymentData!.qr_code,
-                pixQrCodeBase64: paymentData!.qr_code_base64,
+                // O frontend deve redirecionar o usuário para esta URL
+                paymentUrl: redirectUrl, 
             },
         };
     }
@@ -108,16 +109,16 @@ export class CampaignsController {
         };
     }
 
-@Post(':id/stop')
-  @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
-  async stopCampaign(@Req() req, @Param('id', ParseUUIDPipe) id: string) {
-    const user = req.user as User;
-    const result = await this.campaignsService.stopCampaignManual(user, id);
-    
-    return {
-      success: true,
-      message: result.message,
-      data: result
-    };
-  }
+    @Post(':id/stop')
+    @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+    async stopCampaign(@Req() req, @Param('id', ParseUUIDPipe) id: string) {
+        const user = req.user as User;
+        const result = await this.campaignsService.stopCampaignManual(user, id);
+
+        return {
+            success: true,
+            message: result.message,
+            data: result
+        };
+    }
 }
