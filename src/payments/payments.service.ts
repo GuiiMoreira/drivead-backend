@@ -15,9 +15,16 @@ export class PaymentsService {
     private prisma: PrismaService,
   ) {
     const accessToken = this.configService.getOrThrow('MERCADO_PAGO_ACCESS_TOKEN');
+    
     // Pega a URL base do backend (ex: https://drivead-backend.up.railway.app)
-    const backendUrl = this.configService.get('BACKEND_URL') || 'http://localhost:3000'; 
-    this.webhookUrl = `${backendUrl}/webhooks/payment`;
+    // Se não tiver definida, usa localhost (o que não funciona para webhooks reais)
+    const backendUrl = this.configService.get('BACKEND_URL') || this.configService.get('API_URL') || 'http://localhost:3000';
+    
+    // Remove barra final se existir para evitar urls como site.com//webhooks
+    const cleanBackendUrl = backendUrl.replace(/\/$/, '');
+    this.webhookUrl = `${cleanBackendUrl}/webhooks/payment`;
+
+    this.logger.log(`Webhook URL configurada para: ${this.webhookUrl}`);
 
     this.client = new MercadoPagoConfig({ accessToken: accessToken });
   }
@@ -35,8 +42,7 @@ export class PaymentsService {
       throw new NotFoundException('Campanha não encontrada.');
     }
 
-    // 2. Validação de Permissões (Otimizada)
-    // Não precisamos buscar o User no banco de novo, o objeto `user` já tem o advertiserId
+    // 2. Validação de Permissões
     if (!user.advertiserId) {
       throw new ForbiddenException('Usuário não vinculado a uma empresa (Anunciante).');
     }
@@ -49,32 +55,58 @@ export class PaymentsService {
       throw new ForbiddenException(`Esta campanha não está aguardando pagamento. Status atual: ${campaign.status}`);
     }
 
-    // 3. Criação do Pagamento no Mercado Pago
+    // 3. Validação de Valor
+    if (Number(campaign.budget) <= 0) {
+        throw new ForbiddenException('O valor da campanha deve ser maior que zero.');
+    }
+
+    // 4. Criação do Pagamento no Mercado Pago
     const paymentApi = new Payment(this.client);
+
+    // Garante formato de email válido ou usa fallback
+    const payerEmail = (user.email && user.email.includes('@')) ? user.email : 'financeiro@drivead.com';
 
     const paymentData = {
       body: {
-        transaction_amount: campaign.budget,
-        description: `Pagamento da campanha: ${campaign.title}`,
+        transaction_amount: Number(campaign.budget),
+        description: `Campanha DriveAd: ${campaign.title.substring(0, 30)}`,
         payment_method_id: 'pix',
         payer: {
-          email: user.email || 'financeiro@drivead.com', // Fallback caso o user não tenha email
+          email: payerEmail,
           first_name: user.name || 'Anunciante',
         },
         // A Referência Externa é a nossa "cola". Usamos o ID da campanha.
         external_reference: campaignId,
         notification_url: this.webhookUrl,
       },
+      requestOptions: { idempotencyKey: `${campaignId}-${Date.now()}` } // Evita pagamentos duplicados acidentais
     };
 
     try {
+      this.logger.log(`Iniciando criação de PIX para Campanha ${campaignId}. Valor: ${campaign.budget}`);
+      
       const result = await paymentApi.create(paymentData);
+
+      this.logger.log(`Pagamento criado com sucesso no MP. ID: ${result.id}`);
 
       // Retorna os dados do PIX (Copia e Cola / QR Code)
       return result.point_of_interaction?.transaction_data;
+      
     } catch (error) {
-      this.logger.error(`Falha ao criar pagamento para campanha ${campaignId}`, error);
-      throw new InternalServerErrorException('Falha na comunicação com o gateway de pagamento.');
+      // --- LOG DETALHADO DE ERRO ---
+      this.logger.error(`Falha ao criar pagamento para campanha ${campaignId}`);
+      
+      // Tenta extrair a mensagem real do Mercado Pago
+      if (error.api_response) {
+          this.logger.error(`Erro API MP Status: ${error.api_response.status}`);
+          this.logger.error(`Erro API MP Body: ${JSON.stringify(error.api_response.body, null, 2)}`);
+      } else if (error.response) {
+          this.logger.error(`Erro MP Response: ${JSON.stringify(error.response.data, null, 2)}`);
+      } else {
+          this.logger.error(`Erro genérico: ${error.message}`, error.stack);
+      }
+      
+      throw new InternalServerErrorException('Falha na comunicação com o gateway de pagamento. Verifique os logs do servidor.');
     }
   }
 }
