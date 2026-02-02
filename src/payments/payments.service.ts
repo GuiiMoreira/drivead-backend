@@ -8,7 +8,7 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 export class PaymentsService {
   private readonly client: MercadoPagoConfig;
   private readonly logger = new Logger(PaymentsService.name);
-  private readonly webhookUrl: string;
+  private readonly webhookUrl: string | undefined;
 
   constructor(
     private configService: ConfigService,
@@ -17,14 +17,23 @@ export class PaymentsService {
     const accessToken = this.configService.getOrThrow('MERCADO_PAGO_ACCESS_TOKEN');
     
     // Pega a URL base do backend (ex: https://drivead-backend.up.railway.app)
-    // Se não tiver definida, usa localhost (o que não funciona para webhooks reais)
-    const backendUrl = this.configService.get('BACKEND_URL') || this.configService.get('API_URL') || 'http://localhost:3000';
+    // REMOVIDO fallback para localhost pois causa erro de validação "must be url valid" no Mercado Pago
+    const rawBackendUrl = this.configService.get('BACKEND_URL') || this.configService.get('API_URL');
     
-    // Remove barra final se existir para evitar urls como site.com//webhooks
-    const cleanBackendUrl = backendUrl.replace(/\/$/, '');
-    this.webhookUrl = `${cleanBackendUrl}/webhooks/payment`;
-
-    this.logger.log(`Webhook URL configurada para: ${this.webhookUrl}`);
+    if (rawBackendUrl) {
+      // Remove barra final e espaços em branco que podem vir do .env
+      const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '').trim();
+      
+      // Valida se parece uma URL real
+      if (cleanBackendUrl.startsWith('http')) {
+        this.webhookUrl = `${cleanBackendUrl}/webhooks/payment`;
+        this.logger.log(`Webhook URL configurada com sucesso: ${this.webhookUrl}`);
+      } else {
+        this.logger.warn(`BACKEND_URL informada não parece válida (${cleanBackendUrl}). Webhooks ignorados.`);
+      }
+    } else {
+      this.logger.warn('BACKEND_URL/API_URL não configurada. Pagamentos serão criados sem notificação automática (Webhook).');
+    }
 
     this.client = new MercadoPagoConfig({ accessToken: accessToken });
   }
@@ -66,6 +75,9 @@ export class PaymentsService {
     // Garante formato de email válido ou usa fallback
     const payerEmail = (user.email && user.email.includes('@')) ? user.email : 'financeiro@drivead.com';
 
+    // Log para depuração em produção
+    this.logger.log(`Criando PIX. Campanha: ${campaignId}, Valor: ${campaign.budget}, Webhook: ${this.webhookUrl || 'DESATIVADO'}`);
+
     const paymentData = {
       body: {
         transaction_amount: Number(campaign.budget),
@@ -77,14 +89,13 @@ export class PaymentsService {
         },
         // A Referência Externa é a nossa "cola". Usamos o ID da campanha.
         external_reference: campaignId,
+        // Só envia notification_url se ela estiver definida e válida. Enviar undefined faz o MP ignorar o campo (correto).
         notification_url: this.webhookUrl,
       },
       requestOptions: { idempotencyKey: `${campaignId}-${Date.now()}` } // Evita pagamentos duplicados acidentais
     };
 
     try {
-      this.logger.log(`Iniciando criação de PIX para Campanha ${campaignId}. Valor: ${campaign.budget}`);
-      
       const result = await paymentApi.create(paymentData);
 
       this.logger.log(`Pagamento criado com sucesso no MP. ID: ${result.id}`);
