@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { AdvertiserGuard } from '../core/guards/advertiser.guard';
-import { PayCampaignDto } from './dto/pay-campaign.dto';
+// import { PayCampaignDto } from './dto/pay-campaign.dto'; // REMOVIDO: Não validamos mais o body no Checkout Pro
 import { User } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
@@ -18,11 +18,11 @@ export class CampaignsController {
 
     @Post()
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
-    @UseInterceptors(FileInterceptor('file')) // <-- Intercepta o campo 'file'
+    @UseInterceptors(FileInterceptor('file'))
     async createCampaign(
         @Req() req,
-        @Body() body: { data: string }, // Recebe o JSON como string no campo 'data'
-        @UploadedFile() file: Express.Multer.File // Recebe o arquivo
+        @Body() body: { data: string },
+        @UploadedFile() file: Express.Multer.File
     ) {
         if (!file) {
             throw new BadRequestException('A imagem do criativo é obrigatória.');
@@ -49,30 +49,29 @@ export class CampaignsController {
         };
     }
 
+    // CORREÇÃO DO ERRO 400:
+    // Removemos @Body() payCampaignDto.
+    // Agora o endpoint aceita requisições sem corpo (body vazio), que é o padrão para redirecionamentos.
     @Post(':id/pay')
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
     async payForCampaign(
         @Req() req,
         @Param('id', ParseUUIDPipe) id: string,
-        @Body() payCampaignDto: PayCampaignDto, // DTO de pagamento
     ) {
         const user = req.user as User;
         
-        // CORREÇÃO: O serviço agora retorna uma STRING (URL de redirecionamento)
-        // por causa da mudança para Checkout Pro
+        // Chama o serviço que retorna a URL de redirecionamento
         const redirectUrl = await this.paymentsService.createPaymentOrder(id, user);
 
         return {
             success: true,
             message: 'Link de pagamento gerado com sucesso.',
             data: {
-                // O frontend deve redirecionar o usuário para esta URL
                 paymentUrl: redirectUrl, 
             },
         };
     }
 
-    // Endpoint útil para verificar o estado de uma campanha
     @Get(':id')
     @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
     async getCampaignDetails(
