@@ -19,14 +19,21 @@ export class AuthService {
    * Em produção, isto deve integrar-se com um gateway de SMS.
    */
   async sendOtp(phone: string): Promise<String> {
-    // 1. Gera um código aleatório de 6 dígitos
+    // 1. REGRA DE TESTE (Bypass de SMS)
+    // Se o telefone começar com +557199999, não gera código aleatório nem grava no banco.
+    if (phone.startsWith('+557199999')) {
+      this.logger.log(`[TEST MODE] Telefone de teste detectado: ${phone}. Código fixo será 123456.`);
+      return `🔑 [OTP TESTE] Para ${phone}: 123456`;
+    }
+
+    // 2. Gera um código aleatório de 6 dígitos
     const otp = randomInt(100000, 999999).toString();
 
-    // 2. Define a validade (ex: 5 minutos)
+    // 3. Define a validade (ex: 5 minutos)
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
-    // 3. Guarda (ou atualiza) o código na base de dados
+    // 4. Guarda (ou atualiza) o código na base de dados
     await this.prisma.otpChallenge.upsert({
       where: { phone },
       update: {
@@ -42,7 +49,6 @@ export class AuthService {
 
     // --- PONTO DE ENVIO DE SMS ---
     // Por enquanto, vamos registar no log para você poder ver no Railway.
-    // No futuro, substituiremos esta linha pela chamada ao serviço de SMS (Twilio, Zenvia, etc.)
     this.logger.log(`🔑 [OTP REAL] Para ${phone}: ${otp}`);
     return `🔑 [OTP REAL] Para ${phone}: ${otp}`;
     // -----------------------------
@@ -52,19 +58,28 @@ export class AuthService {
    * Verifica o OTP e, se válido, cria ou encontra o utilizador e gera os tokens.
    */
   async verifyOtpAndSignTokens(phone: string, otp: string, role?: Role) {
-    // 1. Verifica o OTP (lógica de validação real)
-    const challenge = await this.prisma.otpChallenge.findUnique({
-      where: { phone },
-    });
+    // 1. Lógica de Validação (Teste vs Real)
+    if (phone.startsWith('+557199999')) {
+      // --- BYPASS DE TESTE ---
+      if (otp !== '123456') {
+        throw new UnauthorizedException('Código de teste incorreto. Use 123456.');
+      }
+      this.logger.log(`[TEST MODE] Login de teste realizado para ${phone}`);
+    } else {
+      // --- VALIDAÇÃO REAL ---
+      const challenge = await this.prisma.otpChallenge.findUnique({
+        where: { phone },
+      });
 
-    if (!challenge || challenge.otpCode !== otp || new Date() > challenge.expiresAt) {
-      throw new UnauthorizedException('Código OTP inválido ou expirado.');
+      if (!challenge || challenge.otpCode !== otp || new Date() > challenge.expiresAt) {
+        throw new UnauthorizedException('Código OTP inválido ou expirado.');
+      }
+
+      // Apaga o desafio para não ser usado novamente
+      await this.prisma.otpChallenge.delete({ where: { phone } });
     }
 
-    // 2. Apaga o desafio para não ser usado novamente
-    await this.prisma.otpChallenge.delete({ where: { phone } });
-
-    // 3. Encontra ou cria o utilizador (registo de autenticação)
+    // 2. Encontra ou cria o utilizador (registo de autenticação)
     let user = await this.prisma.user.findUnique({ where: { phone } });
     if (!user) {
       user = await this.prisma.user.create({
@@ -75,9 +90,7 @@ export class AuthService {
       });
     }
 
-    // 4. --- LÓGICA DA CORREÇÃO ---
-    // Verificamos se o perfil (Driver/Advertiser) já foi criado.
-    // Esta é a verificação que realmente importa.
+    // 3. Verificação de Onboarding Completo
     let onboardingComplete = false;
 
     if (user.role === Role.driver) {
@@ -109,10 +122,9 @@ export class AuthService {
   }
 
   /**
-   * NOVO MÉTODO: Lida com a requisição de refresh.
+   * Lida com a requisição de refresh.
    */
   async refreshToken(token: string) {
-    // A correção está nesta linha
     const hashedToken = createHash('sha256').update(token).digest('hex');
 
     const refreshToken = await this.prisma.refreshToken.findUnique({
@@ -135,7 +147,7 @@ export class AuthService {
   }
 
   /**
-   * NOVO MÉTODO: Faz o logout, invalidando todos os refresh tokens de um utilizador.
+   * Faz o logout, invalidando todos os refresh tokens de um utilizador.
    */
   async logout(userId: string) {
     await this.prisma.refreshToken.updateMany({
@@ -151,13 +163,13 @@ export class AuthService {
   }
 
   /**
-   * NOVO MÉTODO PRIVADO: Centraliza a geração e armazenamento de tokens.
+   * Centraliza a geração e armazenamento de tokens.
    */
   private async _generateAndStoreTokens(user: User) {
     // 1. Gera o Access Token (curta duração)
     const payload = { sub: user.id, phone: user.phone, role: user.role };
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: process.env.JWT_EXPIRES_IN,
+      expiresIn: process.env.JWT_EXPIRES_IN || '15m', // Fallback se variável não existir
       secret: process.env.JWT_SECRET,
     });
 
@@ -170,6 +182,8 @@ export class AuthService {
       data: {
         userId: user.id,
         tokenHash: hashedRefreshToken,
+        // REMOVIDO: 'expiresAt' causava erro pois não existe no schema.prisma atual.
+        // A gestão de expiração fica implícita ou deve ser adicionada ao schema futuramente.
       },
     });
 
@@ -180,10 +194,8 @@ export class AuthService {
     };
   }
 
-
   /**
    * Busca um perfil de utilizador pelo ID.
-   * @param userId - O ID do utilizador (extraído do payload do JWT).
    */
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -193,10 +205,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Utilizador não encontrado.');
     }
-
-    // Remove campos sensíveis se necessário antes de retornar
-    // delete user.password; (exemplo se tivesse password)
-
     return user;
   }
 
@@ -205,7 +213,7 @@ export class AuthService {
       where: { id: userId },
       include: {
         driver: {
-          include: { vehicles: true } // Opcional: já trazer o veículo no login
+          include: { vehicles: true }
         },
         advertiser: true,
       },
@@ -213,7 +221,6 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Utilizador não encontrado.');
 
-    // Limpa campos desnecessários se quiser, ou retorna tudo
     return user;
   }
 }
