@@ -17,6 +17,32 @@ import { WithdrawRequestDto } from './dto/withdraw-request.dto';
 export class DriversController {
     constructor(private readonly driversService: DriversService) { }
 
+    // --- NOVOS ENDPOINTS V1 (Passo 2) ---
+
+    /**
+     * Endpoint consolidado para a Home do App.
+     * Retorna status, wallet e atribuição ativa num único request.
+     */
+    @Get('me/status')
+    @UseGuards(AuthGuard('jwt')) // Apenas AuthGuard (para funcionar durante onboarding)
+    async getDriverStatus(@Req() req) {
+        const status = await this.driversService.getDriverStatus(req.user as User);
+        return { success: true, data: status };
+    }
+
+    /**
+     * Endpoint para verificar o progresso do cadastro.
+     * O App usa para saber qual tela mostrar (CNH, Fotos Carro, Aguardando).
+     */
+    @Get('me/onboarding')
+    @UseGuards(AuthGuard('jwt'))
+    async getOnboardingStatus(@Req() req) {
+        const status = await this.driversService.getOnboardingStatus(req.user as User);
+        return { success: true, data: status };
+    }
+
+    // ------------------------------------
+
     /**
      * Endpoint para um utilizador autenticado criar o seu perfil de motorista e
      * registar o seu primeiro veículo.
@@ -182,68 +208,68 @@ export class DriversController {
     }
 
     @Get('me/vehicles')
-  @UseGuards(AuthGuard('jwt'), DriverGuard)
-  async getMyVehicles(@Req() req) {
-    const vehicles = await this.driversService.getMyVehicles(req.user as User);
-    return {
-      success: true,
-      data: vehicles,
-    };
-  }
-/**
-   * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
-   */
-  @Post('me/assignment/quit')
-  @UseGuards(AuthGuard('jwt'), DriverGuard)
-  async quitCampaign(@Req() req, @Body() body: { reason: string }) {
-    if (!body.reason) {
-        throw new BadRequestException('O motivo da saída é obrigatório.');
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async getMyVehicles(@Req() req) {
+        const vehicles = await this.driversService.getMyVehicles(req.user as User);
+        return {
+            success: true,
+            data: vehicles,
+        };
+    }
+    /**
+       * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
+       */
+    @Post('me/assignment/quit')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async quitCampaign(@Req() req, @Body() body: { reason: string }) {
+        if (!body.reason) {
+            throw new BadRequestException('O motivo da saída é obrigatório.');
+        }
+
+        const result = await this.driversService.quitCampaign(req.user as User, body.reason);
+
+        return {
+            success: true,
+            message: 'Solicitação de saída recebida. Por favor, siga as instruções para remoção do adesivo.',
+            data: result
+        };
     }
 
-    const result = await this.driversService.quitCampaign(req.user as User, body.reason);
-    
-    return {
-      success: true,
-      message: 'Solicitação de saída recebida. Por favor, siga as instruções para remoção do adesivo.',
-      data: result
-    };
-  }
-  
-  @Get('me/history')
-  @UseGuards(AuthGuard('jwt'), DriverGuard)
-  async getCampaignHistory(@Req() req) {
-    const history = await this.driversService.getCampaignHistory(req.user as User);
-    return {
-      success: true,
-      data: history,
-    };
-  }
-
-   @Post('vehicle-photos')
-  @UseGuards(AuthGuard('jwt'), DriverGuard)
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'front', maxCount: 1 },
-    { name: 'side', maxCount: 1 },
-    { name: 'rear', maxCount: 1 },
-  ]))
-  async uploadVehiclePhotos(
-    @Req() req,
-    @UploadedFiles() files: { 
-      front?: Express.Multer.File[], 
-      side?: Express.Multer.File[], 
-      rear?: Express.Multer.File[] 
-    },
-  ) {
-    if (!files.front || !files.side || !files.rear) {
-      throw new BadRequestException('É necessário enviar as 3 fotos do veículo (frente, lateral e traseira).');
+    @Get('me/history')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async getCampaignHistory(@Req() req) {
+        const history = await this.driversService.getCampaignHistory(req.user as User);
+        return {
+            success: true,
+            data: history,
+        };
     }
 
-    const result = await this.driversService.saveVehiclePhotos(req.user as User, files);
-    
-    return { 
-      success: true, 
-      message: 'Fotos do veículo enviadas com sucesso.',
-      data: result
-    };
-  }
+    @Post('vehicle-photos')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    @UseInterceptors(FileFieldsInterceptor([
+        { name: 'front', maxCount: 1 },
+        { name: 'side', maxCount: 1 },
+        { name: 'rear', maxCount: 1 },
+    ]))
+    async uploadVehiclePhotos(
+        @Req() req,
+        @UploadedFiles() files: {
+            front?: Express.Multer.File[],
+            side?: Express.Multer.File[],
+            rear?: Express.Multer.File[]
+        },
+    ) {
+        if (!files.front || !files.side || !files.rear) {
+            throw new BadRequestException('É necessário enviar as 3 fotos do veículo (frente, lateral e traseira).');
+        }
+
+        const result = await this.driversService.saveVehiclePhotos(req.user as User, files);
+
+        return {
+            success: true,
+            message: 'Fotos do veículo enviadas com sucesso.',
+            data: result
+        };
+    }
 }

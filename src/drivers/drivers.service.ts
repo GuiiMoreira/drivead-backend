@@ -79,6 +79,124 @@ export class DriversService {
     await Promise.all(documentPromises);
   }
 
+  // --- NOVOS MÉTODOS PARA "DRIVER EXPERIENCE" (Passo 2) ---
+
+  /**
+   * Retorna o status consolidado do motorista para a Home do App.
+   * Evita múltiplas chamadas (Wallet, Assignment, Profile).
+   */
+  async getDriverStatus(user: User) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+      include: { 
+        wallet: true 
+      }
+    });
+
+    // Se não tem perfil, retorna estado inicial
+    if (!driver) {
+      return {
+        status: 'onboarding_incomplete',
+        kycStatus: 'none',
+        walletBalance: 0,
+        activeAssignment: null,
+        nextAction: 'Complete seu cadastro para começar',
+        notificationsCount: 0 // Placeholder por enquanto
+      };
+    }
+
+    // Busca assignment ativo (se houver)
+    const activeAssignment = await this.getCurrentAssignment(user);
+    
+    // Define a "Próxima Ação" baseada no estado atual
+    let nextAction = 'Aguardando oportunidades';
+    if (activeAssignment) {
+       switch (activeAssignment.status) {
+          case AssignmentStatus.accepted: nextAction = 'Agendar Instalação do Adesivo'; break;
+          case AssignmentStatus.scheduled: nextAction = 'Ir ao local de instalação'; break;
+          case AssignmentStatus.installed: nextAction = 'Aguardando ativação'; break;
+          case AssignmentStatus.active: nextAction = 'Campanha ativa: Mantenha o GPS ligado'; break;
+          case AssignmentStatus.awaiting_approval: nextAction = 'Aguardando validação da instalação'; break;
+       }
+    } else if (driver.kycStatus === 'pending') {
+       nextAction = 'Aguardando aprovação de documentos';
+    } else if (driver.kycStatus === 'rejected') {
+       nextAction = 'Corrigir documentos rejeitados';
+    } else if (driver.kycStatus === 'approved') {
+       nextAction = 'Escolher uma campanha';
+    }
+
+    return {
+      status: 'active', // Perfil existe
+      kycStatus: driver.kycStatus,
+      walletBalance: driver.wallet?.balance || 0,
+      activeAssignment: activeAssignment, // Retorna objeto completo ou null
+      nextAction,
+      notificationsCount: 0 
+    };
+  }
+
+  /**
+   * Retorna o progresso detalhado do cadastro (Onboarding).
+   * O App usa isso para saber qual tela mostrar (Upload CNH, Fotos Carro, etc).
+   */
+  async getOnboardingStatus(user: User) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+      include: { 
+        vehicles: true,
+        kycDocuments: true 
+      }
+    });
+
+    // Passo 1: Perfil Básico
+    if (!driver) {
+      return { step: 'profile_creation', missing: ['profile'], isApproved: false };
+    }
+
+    // Passo 2: Veículo
+    if (driver.vehicles.length === 0) {
+      return { step: 'vehicle_registration', missing: ['vehicle'], isApproved: false };
+    }
+
+    const vehicle = driver.vehicles[0];
+    const vehiclePhotos = vehicle.photos as any || {};
+    
+    // Passo 3: Fotos do Veículo
+    const missingPhotos = [];
+    if (!vehiclePhotos.front) missingPhotos.push('front');
+    if (!vehiclePhotos.side) missingPhotos.push('side');
+    if (!vehiclePhotos.rear) missingPhotos.push('rear');
+
+    if (missingPhotos.length > 0) {
+       return { step: 'vehicle_photos', missing: missingPhotos, isApproved: false };
+    }
+
+    // Passo 4: Documentos (KYC)
+    const requiredDocs = ['cnhFront', 'cnhBack', 'crlv', 'selfie'];
+    const uploadedDocs = driver.kycDocuments.map(d => d.docType);
+    const missingDocs = requiredDocs.filter(doc => !uploadedDocs.includes(doc));
+
+    if (missingDocs.length > 0) {
+      return { step: 'documents_upload', missing: missingDocs, isApproved: false };
+    }
+
+    // Passo 5: Revisão / Status Final
+    if (driver.kycStatus === 'pending') {
+      return { step: 'under_review', missing: [], isApproved: false, message: 'Seus documentos estão em análise.' };
+    }
+
+    if (driver.kycStatus === 'rejected') {
+      // CORREÇÃO: Removemos driver.rejectionReason pois não existe no schema
+      return { step: 'rejected', missing: [], isApproved: false, rejectionReason: 'Documentação reprovada. Verifique os detalhes.' };
+    }
+
+    // Tudo ok
+    return { step: 'completed', missing: [], isApproved: true };
+  }
+
+  // -----------------------------------------------------------
+
   async listEligibleCampaigns(user: User) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
