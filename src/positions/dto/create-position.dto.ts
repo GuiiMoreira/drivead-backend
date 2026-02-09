@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsLatitude, IsLongitude, IsNotEmpty, IsNumber, IsOptional, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsLatitude, IsLongitude, IsNumber, IsOptional, ValidateNested } from 'class-validator';
 
 // DTO para um único ponto de geolocalização
 export class PositionDto {
@@ -17,8 +17,9 @@ export class PositionDto {
     speed?: number;
 }
 
-// DTO para o corpo da requisição, que é um array de posições
-export class CreatePositionsDto {
+// DTO para o corpo da requisição, que é um array de posições (Batch)
+// Renomeado de CreatePositionsDto para CreatePositionBatchDto
+export class CreatePositionBatchDto {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => PositionDto)

@@ -1,7 +1,7 @@
-import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PositionsService } from './positions.service';
-import { CreatePositionsDto } from './dto/create-position.dto';
+import { CreatePositionBatchDto } from './dto/create-position.dto'; // Import atualizado
 import { DriverGuard } from '../core/guards/driver.guard';
 import { User } from '@prisma/client';
 
@@ -10,11 +10,14 @@ import { User } from '@prisma/client';
 export class PositionsController {
   constructor(private readonly positionsService: PositionsService) {}
 
-  @Post()
-  async create(@Req() req, @Body() createPositionDto: CreatePositionsDto) {
+  // Alterado para 'batch' para seguir a recomendação da análise (Item 2.3)
+  // Rota Final: POST /api/v1/positions/batch
+  @Post('batch')
+  @HttpCode(HttpStatus.OK) // Retorna 200 OK em vez de 201 Created (padrão para batch process)
+  async createBatch(@Req() req, @Body() batchDto: CreatePositionBatchDto) {
     const result = await this.positionsService.createPositions(
       req.user as User, 
-      createPositionDto.positions
+      batchDto.positions
     );
 
     // Verificação de Tipo:
