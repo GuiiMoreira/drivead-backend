@@ -1,65 +1,31 @@
-import { Controller, Post, Body, Query, HttpCode, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CampaignStatus } from '@prisma/client';
-import { MercadoPagoConfig, Payment } from 'mercadopago';
-import { ConfigService } from '@nestjs/config';
+import { Controller, Post, Body, Query, HttpCode, HttpStatus, Logger, Headers, ForbiddenException } from '@nestjs/common';
+import { WebhooksService } from './webhooks.service';
 
 @Controller('webhooks')
 export class WebhooksController {
-    private readonly logger = new Logger(WebhooksController.name);
-    private readonly mpClient: MercadoPagoConfig;
-
-    constructor(
-        private prisma: PrismaService,
-        private configService: ConfigService,
-    ) {
-        // Precisamos do client do MP para verificar a autenticidade do pagamento
-        const accessToken = this.configService.getOrThrow('MERCADO_PAGO_ACCESS_TOKEN');
-        this.mpClient = new MercadoPagoConfig({ accessToken: accessToken });
-    }
+    constructor(private readonly webhooksService: WebhooksService) {}
 
     @Post('payment')
-    @HttpCode(HttpStatus.OK) // Sempre retorne 200 para o Mercado Pago
-    async handleMercadoPagoWebhook(@Query() query: any, @Body() body: any) {
-        this.logger.log('Recebido webhook do Mercado Pago:', body);
-
-        // O Mercado Pago envia o ID do pagamento no query param `data.id`
-        const paymentId = query['data.id'];
-
-        if (body.type === 'payment' && paymentId) {
-            try {
-                const paymentApi = new Payment(this.mpClient);
-                const payment = await paymentApi.get({ id: paymentId });
-
-                const campaignId = payment.external_reference;
-                const paymentStatus = payment.status;
-
-                if (!campaignId) {
-                    throw new NotFoundException('ID da campanha (external_reference) não encontrado no pagamento.');
-                }
-
- if (paymentStatus === 'approved') {
-  // ATUALIZAÇÃO: Muda para 'pending_approval' em vez de 'active'
-  await this.prisma.campaign.updateMany({
-    where: {
-      id: campaignId,
-      status: CampaignStatus.draft,
-    },
-    data: {
-      status: CampaignStatus.pending_approval, // <--- MUDANÇA AQUI
-    },
-  });
-  this.logger.log(`Campanha ${campaignId} paga. Aguardando aprovação do admin.`);
-} else {
-                    this.logger.log(`Status do pagamento ${paymentId} é: ${paymentStatus}`);
-                }
-
-            } catch (error) {
-                this.logger.error('Erro ao processar webhook do Mercado Pago', error);
-            }
+    @HttpCode(HttpStatus.OK)
+    async handleMercadoPagoWebhook(
+        @Headers() headers: any,
+        @Query() query: any, 
+        @Body() body: any
+    ) {
+        // 1. Validação de Segurança (HMAC)
+        // Se a assinatura não bater, rejeitamos a requisição.
+        const isValid = this.webhooksService.validateSignature(headers, body, query);
+        
+        if (!isValid) {
+            // Se falhar e tiver segredo configurado, rejeita.
+            // Se não tiver segredo (dev), o service retorna true, então aqui só cai se for ataque mesmo.
+            throw new ForbiddenException('Assinatura de Webhook Inválida.');
         }
 
-        // Responde OK para o Mercado Pago parar de enviar o webhook
+        // 2. Processamento
+        await this.webhooksService.handlePayment(query, body);
+
+        // Sempre responde 200 OK para o Mercado Pago não reenviar
         return { received: true };
     }
 }
