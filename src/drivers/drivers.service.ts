@@ -29,18 +29,33 @@ export class DriversService {
     const { driver, vehicle } = createDriverDto;
 
     return this.prisma.$transaction(async (tx) => {
+      // 1. Atualiza o User com os dados recebidos do front
       await tx.user.update({
         where: { id: user.id },
-        data: { name: driver.name },
+        data: { 
+          name: driver.name,
+          email: driver.email, // Salva o e-mail
+        },
       });
 
+      // 2. Cria o perfil do motorista
       const newDriver = await tx.driver.create({
         data: {
           userId: user.id,
           cpf: driver.cpf,
+          optInPolitical: driver.optInPolitical ?? false, // Salva a preferência política
         },
       });
 
+      // 3. CORREÇÃO CRÍTICA (MVP): Cria a carteira do motorista zerada
+      await tx.driverWallet.create({
+        data: {
+          driverId: newDriver.id,
+          balance: 0,
+        }
+      });
+
+      // 4. Regista o veículo
       const newVehicle = await tx.vehicle.create({
         data: {
           driverId: newDriver.id,
@@ -76,15 +91,18 @@ export class DriversService {
         },
       });
     });
+
     await Promise.all(documentPromises);
+
+    // CORREÇÃO CRÍTICA (MVP): Atualiza o status do motorista para voltar para a fila de análise
+    await this.prisma.driver.update({
+      where: { id: driver.id },
+      data: { kycStatus: 'pending' }
+    });
   }
 
-  // --- NOVOS MÉTODOS PARA "DRIVER EXPERIENCE" (Passo 2) ---
+  // --- MÉTODOS DE "DRIVER EXPERIENCE" ---
 
-  /**
-   * Retorna o status consolidado do motorista para a Home do App.
-   * Evita múltiplas chamadas (Wallet, Assignment, Profile).
-   */
   async getDriverStatus(user: User) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
@@ -93,7 +111,6 @@ export class DriversService {
       }
     });
 
-    // Se não tem perfil, retorna estado inicial
     if (!driver) {
       return {
         status: 'onboarding_incomplete',
@@ -101,14 +118,12 @@ export class DriversService {
         walletBalance: 0,
         activeAssignment: null,
         nextAction: 'Complete seu cadastro para começar',
-        notificationsCount: 0 // Placeholder por enquanto
+        notificationsCount: 0
       };
     }
 
-    // Busca assignment ativo (se houver)
     const activeAssignment = await this.getCurrentAssignment(user);
     
-    // Define a "Próxima Ação" baseada no estado atual
     let nextAction = 'Aguardando oportunidades';
     if (activeAssignment) {
        switch (activeAssignment.status) {
@@ -127,19 +142,15 @@ export class DriversService {
     }
 
     return {
-      status: 'active', // Perfil existe
+      status: 'active',
       kycStatus: driver.kycStatus,
       walletBalance: driver.wallet?.balance || 0,
-      activeAssignment: activeAssignment, // Retorna objeto completo ou null
+      activeAssignment: activeAssignment,
       nextAction,
       notificationsCount: 0 
     };
   }
 
-  /**
-   * Retorna o progresso detalhado do cadastro (Onboarding).
-   * O App usa isso para saber qual tela mostrar (Upload CNH, Fotos Carro, etc).
-   */
   async getOnboardingStatus(user: User) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
@@ -149,12 +160,10 @@ export class DriversService {
       }
     });
 
-    // Passo 1: Perfil Básico
     if (!driver) {
       return { step: 'profile_creation', missing: ['profile'], isApproved: false };
     }
 
-    // Passo 2: Veículo
     if (driver.vehicles.length === 0) {
       return { step: 'vehicle_registration', missing: ['vehicle'], isApproved: false };
     }
@@ -162,7 +171,6 @@ export class DriversService {
     const vehicle = driver.vehicles[0];
     const vehiclePhotos = vehicle.photos as any || {};
     
-    // Passo 3: Fotos do Veículo
     const missingPhotos = [];
     if (!vehiclePhotos.front) missingPhotos.push('front');
     if (!vehiclePhotos.side) missingPhotos.push('side');
@@ -172,7 +180,6 @@ export class DriversService {
        return { step: 'vehicle_photos', missing: missingPhotos, isApproved: false };
     }
 
-    // Passo 4: Documentos (KYC)
     const requiredDocs = ['cnhFront', 'cnhBack', 'crlv', 'selfie'];
     const uploadedDocs = driver.kycDocuments.map(d => d.docType);
     const missingDocs = requiredDocs.filter(doc => !uploadedDocs.includes(doc));
@@ -181,17 +188,14 @@ export class DriversService {
       return { step: 'documents_upload', missing: missingDocs, isApproved: false };
     }
 
-    // Passo 5: Revisão / Status Final
     if (driver.kycStatus === 'pending') {
       return { step: 'under_review', missing: [], isApproved: false, message: 'Seus documentos estão em análise.' };
     }
 
     if (driver.kycStatus === 'rejected') {
-      // CORREÇÃO: Removemos driver.rejectionReason pois não existe no schema
       return { step: 'rejected', missing: [], isApproved: false, rejectionReason: 'Documentação reprovada. Verifique os detalhes.' };
     }
 
-    // Tudo ok
     return { step: 'completed', missing: [], isApproved: true };
   }
 
@@ -266,7 +270,7 @@ export class DriversService {
       throw new ForbiddenException('O seu perfil de motorista não está aprovado para participar em campanhas.');
     }
 
-const activeAssignment = await this.prisma.assignment.findFirst({
+    const activeAssignment = await this.prisma.assignment.findFirst({
       where: {
         driverId: driver.id,
         status: {
@@ -334,7 +338,7 @@ const activeAssignment = await this.prisma.assignment.findFirst({
           in: [
             AssignmentStatus.assigned,
             AssignmentStatus.accepted,
-            AssignmentStatus.scheduled, // <--- ADICIONADO
+            AssignmentStatus.scheduled,
             AssignmentStatus.awaiting_approval,
             AssignmentStatus.installed,
             AssignmentStatus.active
@@ -350,7 +354,6 @@ const activeAssignment = await this.prisma.assignment.findFirst({
     });
 
     if (!assignment) {
-      // Mudança: Em vez de erro, retorna null (o frontend lida melhor)
       return null; 
     }
     return assignment;
@@ -460,7 +463,6 @@ const activeAssignment = await this.prisma.assignment.findFirst({
         },
       });
 
-      // CORREÇÃO: Se for prova aleatória, dar baixa na solicitação pendente
       if (proofType === ProofType.RANDOM) {
         await tx.assignment.update({
           where: { id: assignment.id },
@@ -533,19 +535,14 @@ const activeAssignment = await this.prisma.assignment.findFirst({
       throw new NotFoundException('Você não possui nenhuma campanha ativa para sair.');
     }
 
-    // Atualiza o status para indicar que a remoção foi solicitada
     return this.prisma.assignment.update({
       where: { id: assignment.id },
       data: {
-        status: AssignmentStatus.removal_requested, // Certifique-se que este status existe no seu Enum
-        // Se quiser salvar o motivo, pode adicionar um campo 'notes' ou 'metadata' na Assignment
-        // ou criar um registro de AuditLog
+        status: AssignmentStatus.removal_requested, 
       }
     });
   }
- /**
-   * Obtém o histórico de campanhas passadas do motorista (finalizadas ou removidas).
-   */
+
   async getCampaignHistory(user: User) {
     const history = await this.prisma.assignment.findMany({
       where: {
@@ -555,12 +552,10 @@ const activeAssignment = await this.prisma.assignment.findFirst({
         }
       },
       include: {
-        campaign: true, // Inclui detalhes da campanha para mostrar título, datas, etc.
-        // Opcional: incluir métricas finais se quiser mostrar resumo de KM rodado
-        // dailyMetrics: { select: { kilometersDriven: true } } 
+        campaign: true, 
       },
       orderBy: {
-        updatedAt: 'desc' // As mais recentes primeiro
+        updatedAt: 'desc' 
       }
     });
 
@@ -568,8 +563,6 @@ const activeAssignment = await this.prisma.assignment.findFirst({
   }
 
   async saveVehiclePhotos(user: User, files: { front?: Express.Multer.File[], side?: Express.Multer.File[], rear?: Express.Multer.File[] }) {
-    // 1. Encontra o veículo principal do motorista
-    // (Assumimos o primeiro veículo ou o mais recente. No futuro pode ser por ID do veículo)
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
       include: {
@@ -586,14 +579,12 @@ const activeAssignment = await this.prisma.assignment.findFirst({
 
     const vehicle = driver.vehicles[0];
 
-    // 2. Faz o upload das 3 imagens em paralelo
     const [frontUrl, sideUrl, rearUrl] = await Promise.all([
       files.front ? this.storageService.uploadFile(files.front[0], `vehicles/${vehicle.id}/front`) : Promise.resolve(null),
       files.side ? this.storageService.uploadFile(files.side[0], `vehicles/${vehicle.id}/side`) : Promise.resolve(null),
       files.rear ? this.storageService.uploadFile(files.rear[0], `vehicles/${vehicle.id}/rear`) : Promise.resolve(null),
     ]);
 
-    // 3. Atualiza o registo do veículo com as URLs no campo JSON 'photos'
     const updatedVehicle = await this.prisma.vehicle.update({
       where: { id: vehicle.id },
       data: {
