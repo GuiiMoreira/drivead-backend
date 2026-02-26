@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, Max, Min, IsInt, ValidateNested, IsDefined, IsEnum, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, Max, Min, IsInt, ValidateNested, IsDefined, IsEnum, IsOptional, IsBoolean, IsEmail } from 'class-validator';
 import { VehicleCategory } from '@prisma/client';
 
 // DTO para os detalhes do veículo
@@ -33,6 +33,15 @@ class DriverProfileDto {
     @IsString()
     // Adicionar validador de CPF customizado em produção
     cpf: string;
+
+    // --- NOVOS CAMPOS ADICIONADOS ---
+    @IsOptional()
+    @IsEmail({}, { message: 'O email fornecido não é válido.' })
+    email?: string;
+
+    @IsOptional()
+    @IsBoolean({ message: 'O campo optInPolitical deve ser um booleano (true/false).' })
+    optInPolitical?: boolean;
 }
 
 // DTO principal que combina os dois
