@@ -1,5 +1,5 @@
 import {
-    Controller, Post, Body, UseGuards, Req, Get, Param, ParseUUIDPipe,
+    Controller, Post, Body, UseGuards, Req, Get, Patch, Param, ParseUUIDPipe,
     UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -12,6 +12,7 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { User } from '@prisma/client';
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { WithdrawRequestDto } from './dto/withdraw-request.dto';
+import { UpdatePixDto } from './dto/update-pix.dto';
 
 @Controller('drivers')
 export class DriversController {
@@ -270,6 +271,23 @@ export class DriversController {
             success: true,
             message: 'Fotos do veículo enviadas com sucesso.',
             data: result
+        };
+    }
+
+    /**
+     * NOVO ENDPOINT: Atualiza a chave PIX do motorista
+     */
+    @Patch('me/pix')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async updatePixKey(
+        @Req() req,
+        @Body() updatePixDto: UpdatePixDto,
+    ) {
+        const result = await this.driversService.updatePixKey(req.user as User, updatePixDto);
+        return {
+            success: true,
+            message: 'Chave PIX cadastrada com sucesso.',
+            data: result,
         };
     }
 }

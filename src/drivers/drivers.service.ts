@@ -5,6 +5,7 @@ import { CampaignStatus, User, AssignmentStatus, ApprovalStatus, VehicleCategory
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { StorageService } from '../storage/storage.service';
 import { WithdrawRequestDto } from './dto/withdraw-request.dto';
+import { UpdatePixDto } from './dto/update-pix.dto';
 
 @Injectable()
 export class DriversService {
@@ -598,5 +599,30 @@ export class DriversService {
     });
 
     return updatedVehicle;
+  }
+
+  async updatePixKey(user: User, dto: UpdatePixDto) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!driver) {
+      throw new NotFoundException('Perfil de motorista não encontrado.');
+    }
+
+    // Atualiza a chave PIX no banco de dados
+    const updatedDriver = await this.prisma.driver.update({
+      where: { id: driver.id },
+      data: {
+        pixKeyType: dto.pixKeyType,
+        pixKey: dto.pixKey,
+      },
+      select: {
+        pixKeyType: true,
+        pixKey: true, // Retornamos apenas os dados atualizados por segurança
+      }
+    });
+
+    return updatedDriver;
   }
 }
