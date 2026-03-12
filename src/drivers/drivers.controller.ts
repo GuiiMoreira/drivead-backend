@@ -12,7 +12,7 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { User } from '@prisma/client';
 import { ScheduleInstallDto } from './dto/schedule-install.dto';
 import { WithdrawRequestDto } from './dto/withdraw-request.dto';
-import { UpdatePixDto } from './dto/update-pix.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
 
 @Controller('drivers')
 export class DriversController {
@@ -217,9 +217,10 @@ export class DriversController {
             data: vehicles,
         };
     }
+    
     /**
-       * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
-       */
+     * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
+     */
     @Post('me/assignment/quit')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
     async quitCampaign(@Req() req, @Body() body: { reason: string }) {
@@ -275,18 +276,18 @@ export class DriversController {
     }
 
     /**
-     * NOVO ENDPOINT: Atualiza a chave PIX do motorista
+     * NOVO ENDPOINT GENÉRICO: Atualiza dados do perfil do motorista (PIX, Política, etc)
      */
-    @Patch('me/pix')
+    @Patch('me')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
-    async updatePixKey(
+    async updateDriverProfile(
         @Req() req,
-        @Body() updatePixDto: UpdatePixDto,
+        @Body() updateDriverDto: UpdateDriverDto,
     ) {
-        const result = await this.driversService.updatePixKey(req.user as User, updatePixDto);
+        const result = await this.driversService.updateDriverProfile(req.user as User, updateDriverDto);
         return {
             success: true,
-            message: 'Chave PIX cadastrada com sucesso.',
+            message: 'Perfil atualizado com sucesso.',
             data: result,
         };
     }
