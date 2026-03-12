@@ -8,7 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres:MYSKnjIkzfGuKafBTSzGCFXLEJhIoETv@hopper.proxy.rlwy.net:45551/railway"
+  url      = env("DATABASE_URL")
 }
 
 // =================================================================
