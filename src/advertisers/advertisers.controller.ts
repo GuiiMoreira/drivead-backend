@@ -5,9 +5,13 @@ import {
   UseGuards,
   Req,
   Get,
-  Post
+  Post,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AdvertisersService } from './advertisers.service';
 import { UpdateAdvertiserDto } from './dto/update-advertiser.dto';
 import { User } from '@prisma/client';
@@ -47,10 +51,44 @@ export class AdvertisersController {
     };
   }
 
+  // --- CORREÇÃO: Endpoint preparado para receber arquivos via FormData ---
   @Post()
   @UseGuards(AuthGuard('jwt'))
-  create(@Req() req, @Body() dto: CreateAdvertiserDto) {
-    return this.advertisersService.createAdvertiser(req.user as User, dto);
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'docCnpj', maxCount: 1 },
+    { name: 'docContrato', maxCount: 1 },
+    { name: 'docResponsavel', maxCount: 1 },
+  ]))
+  async create(
+    @Req() req, 
+    @Body() body: any, 
+    @UploadedFiles() files: { 
+      docCnpj?: Express.Multer.File[], 
+      docContrato?: Express.Multer.File[], 
+      docResponsavel?: Express.Multer.File[] 
+    }
+  ) {
+    let dto: CreateAdvertiserDto;
+    
+    // Tratativa: Se o front enviar os dados dentro de um JSON stringificado na key 'data' (comum em FormData)
+    if (body.data && typeof body.data === 'string') {
+      try {
+        dto = JSON.parse(body.data);
+      } catch (e) {
+        throw new BadRequestException('Formato de dados inválido. Envie um JSON válido no campo "data".');
+      }
+    } else {
+      // Se o front enviar os campos soltos
+      dto = body as CreateAdvertiserDto;
+    }
+
+    const result = await this.advertisersService.createAdvertiser(req.user as User, dto, files);
+
+    return {
+      success: true,
+      message: 'Empresa cadastrada e documentos enviados com sucesso.',
+      data: result
+    };
   }
 
   @Post('members/invite')
