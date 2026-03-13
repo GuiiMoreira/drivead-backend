@@ -1,5 +1,5 @@
 import {
-    Controller, Post, Body, UseGuards, Req, Get, Patch, Param, ParseUUIDPipe, Delete
+    Controller, Post, Body, UseGuards, Req, Get, Patch, Param, ParseUUIDPipe, Delete,
     UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
