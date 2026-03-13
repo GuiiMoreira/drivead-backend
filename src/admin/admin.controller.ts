@@ -5,26 +5,13 @@ import { AdminGuard } from './admin.guard';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { DocValidationStatus } from '@prisma/client';
 
-// DTO simples para a revisão, pode criar um ficheiro separado se preferir
-class ReviewProofDto {
-    approved: boolean;
-    notes?: string;
-}
-
-class ReviewAdvertiserDto {
-  action: 'approve' | 'reject';
-  reason?: string;
-}
-
-class ReviewCampaignDto {
-  action: 'approve' | 'reject';
-  reason?: string;
-}
-
-class ResolveFraudDto {
-  action: 'dismiss' | 'penalize';
-  notes?: string;
-}
+// Importando os novos DTOs validados
+import { 
+  ReviewProofDto, 
+  ReviewAdvertiserDto, 
+  ReviewCampaignDto, 
+  ResolveFraudDto 
+} from './dto/review-actions.dto';
 
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 @Controller('admin')
