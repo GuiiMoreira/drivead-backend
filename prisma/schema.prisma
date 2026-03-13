@@ -39,6 +39,7 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   fcmToken      String?        // <-- O token do celular para enviar Push
   notifications Notification[] // <-- Relacionamento

@@ -628,4 +628,43 @@ export class DriversService {
 
     return updatedDriver;
   }
+
+   async deleteMyAccount(user: User) {
+    // 1. Trava de Segurança: Verificar se há campanha ativa
+    const activeAssignment = await this.getCurrentAssignment(user);
+    if (activeAssignment) {
+        throw new BadRequestException('Você possui uma campanha em andamento. Solicite a saída da campanha e a remoção do adesivo antes de excluir sua conta.');
+    }
+
+    // 2. Trava de Segurança: Verificar saldo na carteira
+    const wallet = await this.getMyWallet(user);
+    if (wallet && wallet.balance > 0) {
+        throw new BadRequestException(`Você possui um saldo de R$ ${wallet.balance.toFixed(2)} na sua carteira. Solicite o saque do valor antes de excluir sua conta.`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 3. Desloga o usuário de todos os dispositivos
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+
+      // 4. Marca o KYC como rejeitado para tirar ele de listagens ativas do Admin
+      const driver = await tx.driver.findUnique({ where: { userId: user.id } });
+      if (driver) {
+        await tx.driver.update({
+          where: { id: driver.id },
+          data: { kycStatus: 'rejected' } 
+        });
+      }
+
+      // 5. Efetua o Soft Delete no Usuário
+      await tx.user.update({
+        where: { id: user.id },
+        data: { deletedAt: new Date() }
+      });
+
+      return { message: 'Conta e dados pessoais inativados com sucesso. Conforme a LGPD e regulamentações financeiras, o histórico de transações é mantido de forma segura.' };
+    });
+  }
 }

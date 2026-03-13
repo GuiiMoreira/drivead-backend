@@ -1,5 +1,5 @@
 import {
-    Controller, Post, Body, UseGuards, Req, Get, Patch, Param, ParseUUIDPipe,
+    Controller, Post, Body, UseGuards, Req, Get, Patch, Param, ParseUUIDPipe, Delete
     UseInterceptors, UploadedFiles, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -275,9 +275,6 @@ export class DriversController {
         };
     }
 
-    /**
-     * NOVO ENDPOINT GENÉRICO: Atualiza dados do perfil do motorista (PIX, Política, etc)
-     */
     @Patch('me')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
     async updateDriverProfile(
@@ -290,5 +287,12 @@ export class DriversController {
             message: 'Perfil atualizado com sucesso.',
             data: result,
         };
+    }
+
+        @Delete('me')
+    @UseGuards(AuthGuard('jwt'), DriverGuard)
+    async deleteMyAccount(@Req() req) {
+        const result = await this.driversService.deleteMyAccount(req.user as User);
+        return { success: true, message: result.message };
     }
 }
