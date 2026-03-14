@@ -273,4 +273,45 @@ export class AdvertisersService {
       weekly_performance: weeklyData
     };
   }
+
+  async getInvoices(user: User) {
+    if (!user.advertiserId) {
+      throw new BadRequestException('Utilizador não vinculado a um anunciante.');
+    }
+
+    // Busca todas as campanhas do anunciante
+    const campaigns = await this.prisma.campaign.findMany({
+      where: { advertiserId: user.advertiserId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        budget: true,
+        status: true,
+        createdAt: true,
+      }
+    });
+
+    // Mapeia as campanhas para o formato de Fatura esperado pelo Front-end
+    return campaigns.map(campaign => {
+      // Traduz o status da campanha para um status financeiro simplificado
+      let paymentStatus = 'pending';
+      
+      if (['pending_approval', 'active', 'finished'].includes(campaign.status)) {
+          paymentStatus = 'paid';
+      } else if (['cancelled', 'rejected'].includes(campaign.status)) {
+          paymentStatus = 'cancelled';
+      }
+
+      return {
+        id: campaign.id,
+        date: campaign.createdAt.toISOString(),
+        description: `Campanha: ${campaign.title}`,
+        amount: Number(campaign.budget),
+        status: paymentStatus,
+        // Como o MVP usa o Checkout Pro do Mercado Pago de forma genérica, assumimos "Mercado Pago" para pagos.
+        paymentMethod: paymentStatus === 'paid' ? 'Mercado Pago' : 'Aguardando Pagamento',
+      };
+    });
+  }
 }

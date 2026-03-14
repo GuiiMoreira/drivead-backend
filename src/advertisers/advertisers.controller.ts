@@ -102,4 +102,17 @@ export class AdvertisersController {
   getDashboard(@Req() req) {
     return this.advertisersService.getDashboardSummary(req.user as User);
   }
+
+
+    @Get('me/invoices')
+  @UseGuards(AuthGuard('jwt'), AdvertiserGuard)
+  async getInvoices(@Req() req) {
+    const user = req.user as User;
+    const invoices = await this.advertisersService.getInvoices(user);
+    
+    return {
+      success: true,
+      data: invoices,
+    };
+  }
 }
