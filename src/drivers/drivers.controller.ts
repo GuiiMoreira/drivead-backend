@@ -32,28 +32,26 @@ export class DriversController {
     }
 
     /**
-     * Endpoint para verificar o progresso do cadastro.
-     * O App usa para saber qual tela mostrar (CNH, Fotos Carro, Aguardando).
+     * NOVO ENDPOINT: Busca os dados já preenchidos para o Front (Rascunho)
      */
     @Get('me/onboarding')
     @UseGuards(AuthGuard('jwt'))
-    async getOnboardingStatus(@Req() req) {
-        const status = await this.driversService.getOnboardingStatus(req.user as User);
-        return { success: true, data: status };
+    async getOnboardingData(@Req() req) {
+      const user = req.user as User;
+      const data = await this.driversService.getOnboardingData(user);
+      return { success: true, data };
     }
 
     // ------------------------------------
 
     /**
      * Endpoint para um utilizador autenticado criar o seu perfil de motorista e
-     * registar o seu primeiro veículo.
+     * registar o seu primeiro veículo (Agora com UPSERT Mágico).
      */
     @UseGuards(AuthGuard('jwt'))
     @Post()
     async createDriverProfile(@Req() req, @Body() createDriverDto: CreateDriverDto) {
-        // O objeto `user` é extraído do token JWT pela nossa JwtStrategy
         const user = req.user as User;
-
         const result = await this.driversService.createDriverProfile(user, createDriverDto);
         return {
             success: true,
@@ -164,11 +162,10 @@ export class DriversController {
 
     @Post('me/assignment/submit-periodic-proof')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
-    @UseInterceptors(FileInterceptor('photo')) // Espera um único ficheiro no campo 'photo'
+    @UseInterceptors(FileInterceptor('photo')) 
     async submitPeriodicProof(
         @Req() req,
         @UploadedFile(
-            // Adicionamos validação básica de ficheiro (ex: max 5MB, apenas JPEG/PNG)
             new ParseFilePipe({
                 validators: [
                     new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 5 }),
@@ -176,7 +173,7 @@ export class DriversController {
                 ],
             }),
         ) file: Express.Multer.File,
-        @Body() submitProofDto: SubmitProofDto, // Recebe os dados do corpo (proofType)
+        @Body() submitProofDto: SubmitProofDto,
     ) {
         const user = req.user as User;
         const proof = await this.driversService.submitPeriodicProof(
@@ -218,9 +215,6 @@ export class DriversController {
         };
     }
     
-    /**
-     * Endpoint para o motorista solicitar a saída antecipada de uma campanha.
-     */
     @Post('me/assignment/quit')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
     async quitCampaign(@Req() req, @Body() body: { reason: string }) {
@@ -289,18 +283,10 @@ export class DriversController {
         };
     }
 
-        @Delete('me')
+    @Delete('me')
     @UseGuards(AuthGuard('jwt'), DriverGuard)
     async deleteMyAccount(@Req() req) {
         const result = await this.driversService.deleteMyAccount(req.user as User);
         return { success: true, message: result.message };
     }
-
-    @Get('me/onboarding')
-  @UseGuards(AuthGuard('jwt'))
-  async getOnboardingData(@Req() req) {
-    const user = req.user as User;
-    const data = await this.driversService.getOnboardingData(user);
-    return { success: true, data };
-  }
 }
