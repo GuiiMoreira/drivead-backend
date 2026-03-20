@@ -94,7 +94,7 @@ model Driver {
   cpf            String?
   cnh            String?
   crlv           String?
-  kycStatus      KycStatus @default(pending)
+  kycStatus      KycStatus @default(incomplete)
   optInPolitical Boolean   @default(false)
   rating         Float?    @default(0)
   createdAt      DateTime  @default(now())
@@ -412,6 +412,7 @@ enum DocValidationStatus {
 // ------------------------------------------------
 
 enum KycStatus {
+  incomplete
   pending
   approved
   rejected

@@ -202,7 +202,7 @@ export class DriversService {
 
   // -----------------------------------------------------------
 
-  async listEligibleCampaigns(user: User) {
+async listEligibleCampaigns(user: User) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
       include: {
@@ -210,22 +210,13 @@ export class DriversService {
       },
     });
 
-    if (!driver || driver.kycStatus !== 'approved' || driver.vehicles.length === 0) {
-      throw new ForbiddenException('O seu perfil de motorista não está aprovado ou não tem um veículo registado.');
+    // Removemos o bloqueio de KYC daqui! O motorista sempre pode ver a vitrine.
+    if (!driver) {
+      return []; // Se nem o perfil base ele criou, retorna vazio.
     }
 
-    const driverVehicle = driver.vehicles[0];
-
-    const categoryRank = {
-      ESSENTIAL: 1,
-      SMART: 2,
-      PRO: 2,
-      PRIME: 3,
-      ECO: 3,
-    };
-    const driverRank = categoryRank[driverVehicle.category];
-
     const whereConditions: any[] = [{ status: CampaignStatus.active }];
+    
     if (!driver.optInPolitical) {
       whereConditions.push({ type: { not: 'political' } });
     }
@@ -247,11 +238,23 @@ export class DriversService {
       },
     });
 
+    const categoryRank = {
+      ESSENTIAL: 1, SMART: 2, PRO: 2, PRIME: 3, ECO: 3,
+    };
+
     const availableCampaigns = campaigns.filter(campaign => {
+      // Regra 1: Tem vaga?
       const hasVacancy = campaign._count.assignments < campaign.numCars;
       if (!hasVacancy) return false;
 
+      // Regra 2: Categoria do Carro
+      // Se ele AINDA NÃO TEM carro, mostramos todas as campanhas para gerar desejo!
+      if (driver.vehicles.length === 0) return true;
+
+      const driverVehicle = driver.vehicles[0];
+      const driverRank = categoryRank[driverVehicle.category];
       const requirements = campaign.requirements as any;
+      
       if (!requirements || !requirements.targetCategory) return true;
 
       const campaignRank = categoryRank[requirements.targetCategory];
@@ -261,27 +264,41 @@ export class DriversService {
     return availableCampaigns.map(({ _count, ...campaign }) => campaign);
   }
 
-  async applyForCampaign(user: User, campaignId: string) {
+async applyForCampaign(user: User, campaignId: string) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
       include: { vehicles: true },
     });
 
-    if (!driver || driver.kycStatus !== 'approved') {
-      throw new ForbiddenException('O seu perfil de motorista não está aprovado para participar em campanhas.');
+    // 1. Verificações de Status com mensagens acionáveis para o Front-end
+    if (!driver) {
+      throw new ForbiddenException('Crie o seu perfil de motorista antes de aceitar campanhas.');
     }
 
+    if (driver.kycStatus === 'incomplete') {
+      throw new ForbiddenException('Complete o seu cadastro enviando os documentos e fotos do veículo para aceitar esta campanha.');
+    }
+
+    if (driver.kycStatus === 'pending') {
+      throw new ForbiddenException('Os seus documentos estão em análise. Aguarde a aprovação para aceitar campanhas.');
+    }
+
+    if (driver.kycStatus === 'rejected') {
+      throw new ForbiddenException('A sua documentação possui pendências. Por favor, acesse o seu perfil, corrija os documentos e tente novamente.');
+    }
+
+    if (driver.vehicles.length === 0) {
+      throw new ForbiddenException('Você precisa registrar um veículo no seu perfil antes de aceitar uma campanha.');
+    }
+
+    // 2. Continua o fluxo normal se estiver 'approved'
     const activeAssignment = await this.prisma.assignment.findFirst({
       where: {
         driverId: driver.id,
         status: {
           in: [
-            AssignmentStatus.assigned,
-            AssignmentStatus.accepted,
-            AssignmentStatus.scheduled,
-            AssignmentStatus.awaiting_approval,
-            AssignmentStatus.installed,
-            AssignmentStatus.active
+            AssignmentStatus.assigned, AssignmentStatus.accepted, AssignmentStatus.scheduled,
+            AssignmentStatus.awaiting_approval, AssignmentStatus.installed, AssignmentStatus.active
           ]
         }
       }
@@ -316,9 +333,6 @@ export class DriversService {
     }
 
     const vehicle = driver.vehicles[0];
-    if (!vehicle) {
-      throw new NotFoundException('Nenhum veículo registado para este motorista.');
-    }
 
     return this.prisma.assignment.create({
       data: {

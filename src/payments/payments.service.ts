@@ -53,7 +53,7 @@ export class PaymentsService {
 
     // 2. Inicializa PREFERENCE
     const preference = new Preference(this.client);
-    const payerEmail = (user.email && user.email.includes('@')) ? user.email : 'financeiro@drivead.com';
+    const payerEmail = (user.email && user.email.includes('@')) ? user.email : 'drivead.app@gmail.com';
 
     this.logger.log(`Criando Link. Campanha: ${campaignId}, Valor: ${campaign.budget}, Retorno: ${this.frontendUrl}/advertiser/payment`);
 
