@@ -295,4 +295,12 @@ export class DriversController {
         const result = await this.driversService.deleteMyAccount(req.user as User);
         return { success: true, message: result.message };
     }
+
+    @Get('me/onboarding')
+  @UseGuards(AuthGuard('jwt'))
+  async getOnboardingData(@Req() req) {
+    const user = req.user as User;
+    const data = await this.driversService.getOnboardingData(user);
+    return { success: true, data };
+  }
 }

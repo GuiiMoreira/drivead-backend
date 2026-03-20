@@ -14,67 +14,68 @@ export class DriversService {
     private storageService: StorageService,
   ) { }
 
-  async createDriverProfile(user: User, createDriverDto: CreateDriverDto) {
-    if (user.role !== 'driver') {
-      throw new ForbiddenException('Apenas utilizadores do tipo "driver" podem criar um perfil.');
-    }
-
-    const existingDriver = await this.prisma.driver.findUnique({
-      where: { userId: user.id },
-    });
-
-    if (existingDriver) {
-      throw new ForbiddenException('Este utilizador já possui um perfil de motorista.');
-    }
-
-    const { driver, vehicle } = createDriverDto;
-
+async createDriverProfile(user: User, dto: any) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Atualiza o User com os dados recebidos do front
-      await tx.user.update({
-        where: { id: user.id },
-        data: { 
-          name: driver.name,
-          email: driver.email, // Salva o e-mail
+      
+      // 1. UPSERT do Motorista (Apenas dados da tabela Driver)
+      const upsertedDriver = await tx.driver.upsert({
+        where: { userId: user.id },
+        update: {
+          cpf: dto.driver.cpf,
+          optInPolitical: dto.driver.optInPolitical,
         },
-      });
-
-      // 2. Cria o perfil do motorista
-      const newDriver = await tx.driver.create({
-        data: {
+        create: {
           userId: user.id,
-          cpf: driver.cpf,
-          optInPolitical: driver.optInPolitical ?? false, // Salva a preferência política
+          cpf: dto.driver.cpf,
+          optInPolitical: dto.driver.optInPolitical,
+          kycStatus: 'incomplete', // Status inicial
         },
       });
 
-      // 3. CORREÇÃO CRÍTICA (MVP): Cria a carteira do motorista zerada
-      await tx.driverWallet.create({
-        data: {
-          driverId: newDriver.id,
-          balance: 0,
+      // 2. Atualiza o NOME e EMAIL na tabela User
+      if (dto.driver.name || dto.driver.email) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { 
+            name: dto.driver.name || user.name,
+            email: dto.driver.email || user.email,
+          },
+        });
+      }
+
+      // 3. UPSERT do Veículo (Garante que ele tenha o carro atualizado)
+      if (dto.vehicle) {
+        const existingVehicle = await tx.vehicle.findFirst({
+          where: { driverId: upsertedDriver.id },
+        });
+
+        if (existingVehicle) {
+          await tx.vehicle.update({
+            where: { id: existingVehicle.id },
+            data: {
+              plate: dto.vehicle.plate,
+              model: dto.vehicle.model,
+              year: dto.vehicle.year,
+              category: dto.vehicle.category,
+            },
+          });
+        } else {
+          await tx.vehicle.create({
+            data: {
+              driverId: upsertedDriver.id,
+              plate: dto.vehicle.plate,
+              model: dto.vehicle.model,
+              year: dto.vehicle.year,
+              category: dto.vehicle.category,
+            },
+          });
         }
-      });
+      }
 
-      // 4. Regista o veículo
-      const newVehicle = await tx.vehicle.create({
-        data: {
-          driverId: newDriver.id,
-          plate: vehicle.plate,
-          model: vehicle.model,
-          year: vehicle.year,
-          category: vehicle.category ?? VehicleCategory.ESSENTIAL,
-        },
-      });
-
-      return {
-        message: 'Perfil de motorista criado com sucesso.',
-        driver: newDriver,
-        vehicle: newVehicle,
-      };
+      return upsertedDriver;
     });
   }
-
+  
   async saveKycDocuments(user: User, files: { [fieldname: string]: Express.Multer.File[] }) {
     const driver = await this.prisma.driver.findUnique({ where: { userId: user.id } });
     if (!driver) { throw new NotFoundException('Perfil de motorista não encontrado.'); }
@@ -680,5 +681,33 @@ async applyForCampaign(user: User, campaignId: string) {
 
       return { message: 'Conta e dados pessoais inativados com sucesso. Conforme a LGPD e regulamentações financeiras, o histórico de transações é mantido de forma segura.' };
     });
+  }
+
+async getOnboardingData(user: User) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId: user.id },
+      include: { vehicles: { take: 1 } },
+    });
+
+    if (!driver) {
+      return { driver: null, vehicle: null };
+    }
+
+    const vehicle = driver.vehicles.length > 0 ? driver.vehicles[0] : null;
+
+    return {
+      driver: {
+        name: user.name,
+        cpf: driver.cpf,
+        email: user.email, // <-- CORREÇÃO: Lendo da tabela User
+        optInPolitical: driver.optInPolitical,
+      },
+      vehicle: vehicle ? {
+        plate: vehicle.plate,
+        model: vehicle.model,
+        year: vehicle.year,
+        category: vehicle.category,
+      } : null,
+    };
   }
 }
