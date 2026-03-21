@@ -686,20 +686,35 @@ async applyForCampaign(user: User, campaignId: string) {
 async getOnboardingData(user: User) {
     const driver = await this.prisma.driver.findUnique({
       where: { userId: user.id },
-      include: { vehicles: { take: 1 } },
+      include: { 
+        vehicles: { take: 1 },
+        kycDocuments: true // <-- Incluímos os documentos na busca
+      },
     });
 
     if (!driver) {
-      return { driver: null, vehicle: null };
+      return { driver: null, vehicle: null, uploadedDocs: [], uploadedPhotos: [] };
     }
 
     const vehicle = driver.vehicles.length > 0 ? driver.vehicles[0] : null;
+
+    // Mapear os tipos de documentos KYC já enviados (ex: ['cnhFront', 'crlv'])
+    const uploadedDocs = driver.kycDocuments.map(doc => doc.docType);
+
+    // Mapear quais ângulos do carro já foram enviados (ex: ['front', 'side'])
+    const uploadedPhotos = [];
+    if (vehicle && vehicle.photos) {
+      const photos = vehicle.photos as any;
+      if (photos.front) uploadedPhotos.push('front');
+      if (photos.side) uploadedPhotos.push('side');
+      if (photos.rear) uploadedPhotos.push('rear');
+    }
 
     return {
       driver: {
         name: user.name,
         cpf: driver.cpf,
-        email: user.email, // <-- CORREÇÃO: Lendo da tabela User
+        email: user.email, 
         optInPolitical: driver.optInPolitical,
       },
       vehicle: vehicle ? {
@@ -708,6 +723,8 @@ async getOnboardingData(user: User) {
         year: vehicle.year,
         category: vehicle.category,
       } : null,
+      uploadedDocs,
+      uploadedPhotos,
     };
   }
 }
