@@ -693,21 +693,24 @@ async getOnboardingData(user: User) {
     });
 
     if (!driver) {
-      return { driver: null, vehicle: null, uploadedDocs: [], uploadedPhotos: [] };
+      return { driver: null, vehicle: null, uploadedDocs: {}, uploadedPhotos: {} };
     }
 
     const vehicle = driver.vehicles.length > 0 ? driver.vehicles[0] : null;
 
-    // Mapear os tipos de documentos KYC já enviados (ex: ['cnhFront', 'crlv'])
-    const uploadedDocs = driver.kycDocuments.map(doc => doc.docType);
+    // Mapear os tipos de documentos KYC já enviados com as suas URLs
+    const uploadedDocs: Record<string, string> = {};
+    driver.kycDocuments.forEach(doc => {
+      uploadedDocs[doc.docType] = doc.fileUrl;
+    });
 
-    // Mapear quais ângulos do carro já foram enviados (ex: ['front', 'side'])
-    const uploadedPhotos = [];
+    // Mapear quais ângulos do carro já foram enviados com as suas URLs
+    const uploadedPhotos: Record<string, string> = {};
     if (vehicle && vehicle.photos) {
       const photos = vehicle.photos as any;
-      if (photos.front) uploadedPhotos.push('front');
-      if (photos.side) uploadedPhotos.push('side');
-      if (photos.rear) uploadedPhotos.push('rear');
+      if (photos.front) uploadedPhotos['front'] = photos.front;
+      if (photos.side) uploadedPhotos['side'] = photos.side;
+      if (photos.rear) uploadedPhotos['rear'] = photos.rear;
     }
 
     return {
